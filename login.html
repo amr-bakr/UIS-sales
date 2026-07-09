@@ -41,21 +41,40 @@ function redirectByRole(role) {
 async function doLogin() {
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
+
+  if (SUPABASE_URL.includes('YOUR-PROJECT') || SUPABASE_ANON_KEY.includes('YOUR-ANON-KEY')) {
+    errEl.textContent = 'لسه ملف assets/app.js فيه بيانات Supabase الوهمية. حط الـ URL والـ anon key الحقيقيين الأول.';
+    errEl.style.display = 'block';
+    return;
+  }
+
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) {
-    errEl.textContent = 'الإيميل أو كلمة المرور غلط.';
+  const btn = document.querySelector('.btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'جارِ الدخول...';
+
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = 'الإيميل أو كلمة المرور غلط.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const profile = await getCurrentProfile();
+    if (!profile) {
+      errEl.textContent = 'الحساب موجود لكن مفيش صلاحية مربوطة بيه. كلم الإدارة.';
+      errEl.style.display = 'block';
+      return;
+    }
+    redirectByRole(profile.role);
+  } catch (e) {
+    errEl.textContent = 'تعذر الاتصال بالسيرفر: ' + e.message + ' — تأكد إن الـ URL في app.js صحيح ومتصل بالإنترنت.';
     errEl.style.display = 'block';
-    return;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'دخول';
   }
-  const profile = await getCurrentProfile();
-  if (!profile) {
-    errEl.textContent = 'الحساب موجود لكن مفيش صلاحية مربوطة بيه. كلم الإدارة.';
-    errEl.style.display = 'block';
-    return;
-  }
-  redirectByRole(profile.role);
 }
 </script>
 </body>
