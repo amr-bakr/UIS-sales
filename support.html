@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مراجعة التيكنيكال سبورت — UIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="wrap" style="position:relative;">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title">مراجعة التيكنيكال سبورت</div>
+        <div class="brand-sub" id="who">...</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link" id="filter-pending" onclick="setFilter('pending')">بانتظار المراجعة</button>
+      <button class="nav-link" id="filter-all" onclick="setFilter('all')">الكل</button>
+      <button class="btn-logout" onclick="logout()">خروج</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="assets/app.js"></script>
+<script>
+let currentProfile = null;
+let allClients = [];
+let profilesById = {};
+let currentFilter = 'pending';
+
+(async function init() {
+  currentProfile = await requireRole(['support', 'admin']);
+  if (!currentProfile) return;
+  document.getElementById('who').textContent = (currentProfile.full_name || 'تيكنيكال سبورت');
+  await loadProfiles();
+  await loadClients();
+  setFilter('pending');
+})();
+
+async function loadProfiles() {
+  const { data } = await sb.from('profiles').select('*');
+  (data || []).forEach(p => profilesById[p.id] = p);
+}
+
+async function loadClients() {
+  const { data, error } = await sb.from('clients').select('*').order('created_at', { ascending: false });
+  if (error) { alert('خطأ: ' + error.message); return; }
+  allClients = data || [];
+  render();
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.getElementById('filter-pending').classList.toggle('active', f === 'pending');
+  document.getElementById('filter-all').classList.toggle('active', f === 'all');
+  render();
+}
+
+function render() {
+  const el = document.getElementById('list');
+  const items = currentFilter === 'pending' ? allClients.filter(c => c.review_status === 'بانتظار المراجعة') : allClients;
+  if (items.length === 0) { el.innerHTML = '<div class="hint">لا توجد نماذج هنا.</div>'; return; }
+  el.innerHTML = '';
+  items.forEach(c => {
+    const salesName = (profilesById[c.sales_id] && profilesById[c.sales_id].full_name) || '-';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <div class="card-title" style="margin:0;">${c.name || '-'}</div>
+        <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${c.review_status}</span>
+      </div>
+      <div class="hint" style="margin-bottom:8px;">السيلز: ${salesName} | المرحلة: ${stageLabel(c.stage)} | تليفون العميل: ${c.phone || '-'}</div>
+      <div class="summary-box">${buildClientSummary(c)}</div>
+      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="setReview('${c.id}','تم الاستلام')">تحديد كمستلم</button>
+        <button class="btn-secondary" onclick="setReview('${c.id}','يحتاج استكمال')">يحتاج استكمال</button>
+        <button class="btn-secondary" onclick="openDebriefModal('${c.id}')">إضافة Debrief</button>
+      </div>
+    `;
+    el.appendChild(card);
+  });
+}
+
+async function setReview(clientId, status) {
+  await sb.from('clients').update({ review_status: status }).eq('id', clientId);
+  await loadClients();
+  render();
+}
+
+async function openDebriefModal(clientId) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-head"><div class="card-title" style="margin:0;">إضافة Debrief</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="field"><label>إيجابيات الديمو</label><input id="db_well" type="text"></div>
+      <div class="field"><label>اعتراضات</label><input id="db_obj" type="text"></div>
+      <div class="field"><label>الخطوة التالية</label><input id="db_next" type="text"></div>
+      <button class="btn-primary" style="width:100%; margin-top:10px;" onclick="saveDebrief('${clientId}')">حفظ</button>
+    </div>
+  </div>`;
+}
+
+async function saveDebrief(clientId) {
+  const d = {
+    client_id: clientId, created_by: currentProfile.id,
+    went_well: document.getElementById('db_well').value.trim(),
+    objections: document.getElementById('db_obj').value.trim(),
+    next_step: document.getElementById('db_next').value.trim(),
+  };
+  await sb.from('debriefs').insert(d);
+  closeModal();
+}
+
+function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+</script>
+</body>
+</html>

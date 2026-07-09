@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الدخول — UIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="wrap-narrow">
+  <div style="text-align:center; margin-bottom:24px;">
+    <div class="brand-mark" style="margin:0 auto 10px;">UIS</div>
+    <div class="brand-title" style="font-size:20px;">منصة إدارة العملاء المحتملين</div>
+    <div class="brand-sub">سجّل دخولك للمتابعة</div>
+  </div>
+  <div class="card">
+    <div class="field" style="margin-bottom:12px;"><label>الإيميل</label><input id="email" type="email"></div>
+    <div class="field" style="margin-bottom:14px;"><label>كلمة المرور</label><input id="password" type="password"></div>
+    <div id="login-error" class="error-box" style="display:none;"></div>
+    <button onclick="doLogin()" class="btn-primary" style="width:100%;">دخول</button>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+(async function () {
+  const profile = await getCurrentProfile();
+  if (profile) redirectByRole(profile.role);
+})();
+
+function redirectByRole(role) {
+  if (role === 'admin') window.location.href = 'management.html';
+  else if (role === 'support') window.location.href = 'support.html';
+  else window.location.href = 'sales.html';
+}
+
+async function doLogin() {
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = 'الإيميل أو كلمة المرور غلط.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    errEl.textContent = 'الحساب موجود لكن مفيش صلاحية مربوطة بيه. كلم الإدارة.';
+    errEl.style.display = 'block';
+    return;
+  }
+  redirectByRole(profile.role);
+}
+</script>
+</body>
+</html>

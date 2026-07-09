@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة الإدارة — UIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title">لوحة الإدارة</div>
+        <div class="brand-sub" id="who">...</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <select id="country-filter" onchange="render()" style="width:auto;">
+        <option value="">كل الدول</option>
+        <option value="مصر">مصر</option>
+        <option value="الكويت">الكويت</option>
+        <option value="عُمان">عُمان</option>
+      </select>
+      <button class="btn-logout" onclick="logout()">خروج</button>
+    </div>
+  </div>
+
+  <div class="stat-grid" id="stats"></div>
+
+  <div class="card">
+    <div class="card-title">توزيع العملاء حسب المرحلة</div>
+    <canvas id="stageChart" height="90"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">أداء كل سيلز</div>
+    <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th></tr></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+let currentProfile = null;
+let allClients = [];
+let profilesById = {};
+let chartInstance = null;
+
+(async function init() {
+  currentProfile = await requireRole(['admin']);
+  if (!currentProfile) return;
+  document.getElementById('who').textContent = (currentProfile.full_name || 'الإدارة');
+  const { data: profiles } = await sb.from('profiles').select('*');
+  (profiles || []).forEach(p => profilesById[p.id] = p);
+  const { data, error } = await sb.from('clients').select('*');
+  if (error) { alert('خطأ: ' + error.message); return; }
+  allClients = data || [];
+  render();
+})();
+
+function render() {
+  const country = document.getElementById('country-filter').value;
+  const items = country ? allClients.filter(c => c.country === country) : allClients;
+
+  const total = items.length;
+  const won = items.filter(c => c.stage === 'won').length;
+  const needsCompletion = items.filter(c => c.review_status === 'يحتاج استكمال').length;
+  const inDemoOrLater = items.filter(c => c.stage !== 'discovery').length;
+  const conversionToDemo = total ? Math.round((inDemoOrLater / total) * 100) : 0;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">إجمالي العملاء في الـ Pipeline</div></div>
+    <div class="stat-card"><div class="stat-value">${conversionToDemo}%</div><div class="stat-label">نسبة التحويل Discovery → Demo</div></div>
+    <div class="stat-card"><div class="stat-value">${won}</div><div class="stat-label">عملاء تم إغلاقهم (فوز)</div></div>
+    <div class="stat-card"><div class="stat-value">${needsCompletion}</div><div class="stat-label">نماذج تحتاج استكمال بيانات</div></div>
+  `;
+
+  const stageCounts = STAGES.map(s => items.filter(c => c.stage === s.key).length);
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(document.getElementById('stageChart'), {
+    type: 'bar',
+    data: {
+      labels: STAGES.map(s => s.label),
+      datasets: [{ data: stageCounts, backgroundColor: '#1D63B3', borderRadius: 6 }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+  });
+
+  const bySales = {};
+  items.forEach(c => {
+    const key = c.sales_id || 'unknown';
+    if (!bySales[key]) bySales[key] = { total: 0, won: 0, lost: 0, needs: 0 };
+    bySales[key].total++;
+    if (c.stage === 'won') bySales[key].won++;
+    if (c.stage === 'lost') bySales[key].lost++;
+    if (c.review_status === 'يحتاج استكمال') bySales[key].needs++;
+  });
+  const tbody = document.querySelector('#salesTable tbody');
+  tbody.innerHTML = Object.entries(bySales).map(([id, s]) => `
+    <tr>
+      <td>${(profilesById[id] && profilesById[id].full_name) || 'غير معروف'}</td>
+      <td>${s.total}</td><td>${s.won}</td><td>${s.lost}</td><td>${s.needs}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="hint">لا توجد بيانات</td></tr>';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مساحة السيلز — UIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="wrap" style="position:relative;">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title">مساحة السيلز</div>
+        <div class="brand-sub" id="who">...</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <button class="btn-primary" onclick="openNewClientModal()">+ عميل جديد</button>
+      <button class="btn-logout" onclick="logout()">خروج</button>
+    </div>
+  </div>
+
+  <div class="kanban" id="kanban"></div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="assets/app.js"></script>
+<script>
+let currentProfile = null;
+let allClients = [];
+
+(async function init() {
+  currentProfile = await requireRole(['sales', 'admin', 'support']);
+  if (!currentProfile) return;
+  document.getElementById('who').textContent = (currentProfile.full_name || 'سيلز');
+  await loadClients();
+})();
+
+async function loadClients() {
+  const { data, error } = await sb.from('clients').select('*').eq('sales_id', currentProfile.id).order('created_at', { ascending: false });
+  if (error) { alert('خطأ في تحميل العملاء: ' + error.message); return; }
+  allClients = data || [];
+  renderKanban();
+}
+
+function renderKanban() {
+  const el = document.getElementById('kanban');
+  el.innerHTML = '';
+  STAGES.forEach(stage => {
+    const col = document.createElement('div');
+    col.className = 'kanban-col';
+    const items = allClients.filter(c => c.stage === stage.key);
+    col.innerHTML = `<div class="kanban-col-title"><span>${stage.label}</span><span>${items.length}</span></div>`;
+    items.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'kanban-card';
+      card.onclick = () => openClientModal(c);
+      card.innerHTML = `
+        <div class="kanban-card-name">${c.name || '-'}</div>
+        <div class="kanban-card-meta">${c.phone || ''}</div>
+        <div style="margin-top:6px;"><span class="badge-pill ${reviewBadgeClass(c.review_status)}">${c.review_status}</span></div>
+      `;
+      col.appendChild(card);
+    });
+    el.appendChild(col);
+  });
+}
+
+// ---------- New client modal ----------
+function openNewClientModal() {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box">
+      <div class="modal-head"><div class="card-title" style="margin:0;">عميل جديد — نموذج الاكتشاف</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      ${discoveryFormHtml('new')}
+      <div id="new-error" class="error-box" style="display:none;"></div>
+      <button class="btn-primary" style="width:100%; margin-top:12px;" onclick="submitNewClient()">حفظ العميل</button>
+    </div>
+  </div>`;
+  initProblemRows('new');
+}
+
+function discoveryFormHtml(prefix) {
+  return `
+    <div class="grid2">
+      <div class="field"><label>اسم الشركة / العميل <span class="req">*</span></label><input id="${prefix}_name" type="text"></div>
+      <div class="field"><label>رقم التواصل مع العميل</label><input id="${prefix}_phone" type="tel"></div>
+      <div class="field"><label>الدولة</label>
+        <select id="${prefix}_country"><option value="">اختر...</option><option>مصر</option><option>الكويت</option><option>عُمان</option></select>
+      </div>
+      <div class="field"><label>النشاط</label>
+        <select id="${prefix}_activity"><option value="">اختر...</option><option>مطعم فرع واحد</option><option>سلسلة مطاعم</option><option>كافيه</option><option>أخرى</option></select>
+      </div>
+      <div class="field"><label>عدد الفروع</label><input id="${prefix}_branches" type="number"></div>
+      <div class="field"><label>عدد المستخدمين</label><input id="${prefix}_users" type="number"></div>
+      <div class="field"><label>يوجد مطبخ / مصنع مركزي؟</label><select id="${prefix}_warehouse"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>عدد المخازن</label><input id="${prefix}_warehouseCount" type="number"></div>
+      <div class="field"><label>اسم المسؤول ومنصبه</label><input id="${prefix}_contact" type="text"></div>
+      <div class="field"><label>تاريخ الزيارة</label><input id="${prefix}_date" type="date"></div>
+    </div>
+    <div class="card-title" style="margin-top:16px;">النظام الحالي</div>
+    <div class="grid2">
+      <div class="field"><label>يعملون على نظام حالياً؟</label><select id="${prefix}_hasSystem"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>اسم النظام</label><input id="${prefix}_sysName" type="text"></div>
+      <div class="field"><label>منذ متى؟</label><input id="${prefix}_sysAge" type="text"></div>
+      <div class="field"><label>جاهز أم مخصص؟</label><select id="${prefix}_sysType"><option value="">اختر...</option><option>جاهز</option><option>مطوّر خصيصاً</option></select></div>
+    </div>
+    <div class="card-title" style="margin-top:16px;">المشاكل المكتشفة</div>
+    <div id="${prefix}_problems"></div>
+    <button class="btn-secondary" onclick="addProblemRow('${prefix}')">+ إضافة مشكلة</button>
+    <div class="card-title" style="margin-top:16px;">الاحتياجات والتقارير</div>
+    <textarea id="${prefix}_needs" rows="2"></textarea>
+    <div class="card-title" style="margin-top:16px;">الموديولات المطلوبة</div>
+    <div class="chips" id="${prefix}_modules">
+      <label class="chip"><input type="checkbox" value="POS"> POS</label>
+      <label class="chip"><input type="checkbox" value="Inventory"> Inventory</label>
+      <label class="chip"><input type="checkbox" value="Purchasing"> Purchasing</label>
+      <label class="chip"><input type="checkbox" value="Tablet Ordering"> Tablet Ordering</label>
+      <label class="chip"><input type="checkbox" value="Accounting"> Accounting</label>
+      <label class="chip"><input type="checkbox" value="Dashboard"> Dashboard</label>
+    </div>
+    <div class="card-title" style="margin-top:16px;">الحضور وصاحب القرار وتوصية الديمو</div>
+    <div class="grid2">
+      <div class="field"><label>مين هيحضر الديمو؟</label><input id="${prefix}_attendees" type="text"></div>
+      <div class="field"><label>مين صاحب القرار؟</label><input id="${prefix}_decision" type="text"></div>
+      <div class="field"><label>الإدارة المالية لازم تحضر؟</label><select id="${prefix}_finance"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>مسؤول التشغيل لازم يحضر؟</label><select id="${prefix}_ops"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>تاريخ الديمو المقترح</label><input id="${prefix}_demoDate" type="date"></div>
+      <div class="field"><label>الساعة</label><input id="${prefix}_demoTime" type="time"></div>
+      <div class="field" style="grid-column:span 2;"><label>المكان</label><input id="${prefix}_demoPlace" type="text"></div>
+    </div>
+  `;
+}
+
+let problemCounters = {};
+function initProblemRows(prefix) { problemCounters[prefix] = 0; addProblemRow(prefix); }
+function addProblemRow(prefix) {
+  problemCounters[prefix] = (problemCounters[prefix] || 0) + 1;
+  const rid = prefix + '_p' + problemCounters[prefix];
+  const div = document.createElement('div');
+  div.className = 'problem-row';
+  div.setAttribute('data-id', rid);
+  div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 90px 28px; gap:6px; margin-bottom:6px;';
+  div.innerHTML = `
+    <input type="text" placeholder="المشكلة" id="${rid}_issue">
+    <input type="text" placeholder="التفاصيل الفنية" id="${rid}_detail">
+    <select id="${rid}_priority"><option value="">الأولوية</option><option>عالية</option><option>متوسطة</option><option>منخفضة</option></select>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:#C0392B;cursor:pointer;">✕</button>
+  `;
+  document.getElementById(prefix + '_problems').appendChild(div);
+}
+
+function collectModulesFrom(prefix) {
+  const boxes = document.querySelectorAll('#' + prefix + '_modules input[type=checkbox]:checked');
+  return Array.from(boxes).map(b => b.value);
+}
+
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+async function submitNewClient() {
+  const errEl = document.getElementById('new-error');
+  errEl.style.display = 'none';
+  const name = v('new_name');
+  if (!name) { errEl.textContent = 'اكتب اسم العميل.'; errEl.style.display = 'block'; return; }
+  const d = {
+    name, phone: v('new_phone'), country: v('new_country'),
+    activity: v('new_activity'), branches: v('new_branches'), users_count: v('new_users'),
+    warehouse: v('new_warehouse'), warehouse_count: v('new_warehouseCount'), contact: v('new_contact'), visit_date: v('new_date'),
+    has_system: v('new_hasSystem'), sys_name: v('new_sysName'), sys_age: v('new_sysAge'), sys_type: v('new_sysType'),
+    problems: collectProblemsFromDom('new_problems'), needs: v('new_needs'),
+    modules: collectModulesFrom('new'),
+    attendees: v('new_attendees'), decision: v('new_decision'), finance: v('new_finance'), ops: v('new_ops'),
+    demo_date: v('new_demoDate'), demo_time: v('new_demoTime'), demo_place: v('new_demoPlace'),
+    sales_id: currentProfile.id, stage: 'discovery', review_status: 'بانتظار المراجعة',
+  };
+  const { error } = await sb.from('clients').insert(d);
+  if (error) { errEl.textContent = 'خطأ: ' + error.message; errEl.style.display = 'block'; return; }
+  closeModal();
+  await loadClients();
+}
+
+// ---------- Client detail modal ----------
+async function openClientModal(c) {
+  const root = document.getElementById('modal-root');
+  const { data: debriefs } = await sb.from('debriefs').select('*').eq('client_id', c.id).order('created_at', { ascending: false });
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box">
+      <div class="modal-head"><div class="card-title" style="margin:0;">${c.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>المرحلة الحالية</label>
+        <select id="stage-select">${STAGES.map(s => `<option value="${s.key}" ${s.key === c.stage ? 'selected' : ''}>${s.label}</option>`).join('')}</select>
+      </div>
+      <button class="btn-secondary" onclick="updateStage('${c.id}')">تحديث المرحلة</button>
+      <div class="summary-box" style="margin-top:14px;">${buildClientSummary(c)}</div>
+      <div class="card-title" style="margin-top:16px;">Debrief</div>
+      <div id="debrief-list">${(debriefs || []).map(db => `
+        <div class="hint" style="margin-bottom:8px; padding:8px; background:var(--blue-50); border-radius:8px;">
+          ${new Date(db.created_at).toLocaleDateString('ar-EG')}<br>
+          إيجابيات: ${db.went_well || '-'}<br>اعتراضات: ${db.objections || '-'}<br>الخطوة التالية: ${db.next_step || '-'}
+        </div>`).join('') || '<div class="hint">لا يوجد Debrief بعد</div>'}
+      </div>
+      <div class="field"><label>إيجابيات الديمو</label><input id="db_well" type="text"></div>
+      <div class="field"><label>اعتراضات</label><input id="db_obj" type="text"></div>
+      <div class="field"><label>الخطوة التالية</label><input id="db_next" type="text"></div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="addDebrief('${c.id}')">إضافة Debrief</button>
+    </div>
+  </div>`;
+}
+
+async function updateStage(clientId) {
+  const stage = document.getElementById('stage-select').value;
+  await sb.from('clients').update({ stage }).eq('id', clientId);
+  closeModal();
+  await loadClients();
+}
+
+async function addDebrief(clientId) {
+  const d = { client_id: clientId, created_by: currentProfile.id, went_well: v('db_well'), objections: v('db_obj'), next_step: v('db_next') };
+  await sb.from('debriefs').insert(d);
+  const c = allClients.find(x => x.id === clientId);
+  openClientModal(c);
+}
+
+function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+</script>
+</body>
+</html>
