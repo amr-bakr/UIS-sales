@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تقرير التنفيذ والـ Go-Live — UIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .item-row { display:grid; grid-template-columns:1fr 90px 32px; gap:8px; margin-bottom:8px; }
+  .issue-row { display:grid; grid-template-columns:1fr 1fr 100px 32px; gap:8px; margin-bottom:8px; }
+  #print-view { display:none; }
+  @media print {
+    body * { visibility:hidden; }
+    #print-view, #print-view * { visibility:visible; }
+    #print-view { display:block; position:absolute; top:0; right:0; left:0; padding:20px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title">تقرير التنفيذ والـ Go-Live</div>
+        <div class="brand-sub" id="client-name">...</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <button class="btn-secondary" onclick="history.back()">رجوع</button>
+      <button class="btn-primary" onclick="saveReport()">حفظ</button>
+      <button class="btn-secondary" onclick="printReport()">تصدير PDF</button>
+    </div>
+  </div>
+
+  <div id="form-area"></div>
+</div>
+
+<div id="print-view"></div>
+
+<script src="assets/app.js"></script>
+<script>
+let currentProfile = null;
+let client = null;
+let report = null;
+const params = new URLSearchParams(window.location.search);
+const clientId = params.get('client');
+
+(async function init() {
+  currentProfile = await requireRole(['admin', 'support', 'sales']);
+  if (!currentProfile) return;
+  if (!clientId) { document.getElementById('form-area').innerHTML = '<div class="error-box">مفيش عميل محدد.</div>'; return; }
+
+  const { data: c } = await sb.from('clients').select('*').eq('id', clientId).single();
+  client = c;
+  document.getElementById('client-name').textContent = client ? client.name : '-';
+
+  const { data: r } = await sb.from('implementation_reports').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1);
+  report = (r && r[0]) || null;
+  renderForm();
+})();
+
+function renderForm() {
+  const d = report || {};
+  document.getElementById('form-area').innerHTML = `
+    <div class="card">
+      <div class="card-title">نظرة عامة على المشروع</div>
+      <div class="grid2">
+        <div class="field"><label>اسم العميل</label><input value="${client.name || ''}" disabled></div>
+        <div class="field"><label>الدولة</label><input value="${client.country || ''}" disabled></div>
+        <div class="field"><label>اسم مهندس الميدان</label><input id="r_engineer" value="${d.engineer_name || ''}"></div>
+        <div class="field"><label>تاريخ التفعيل</label><input id="r_activation" type="date" value="${d.activation_date || ''}"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">ملاحظات الهاردوير والتركيب</div>
+      <textarea id="r_hardware" rows="3">${d.hardware_notes || ''}</textarea>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Checklist التركيب</div>
+      <div id="checklist"></div>
+      <button class="btn-secondary" onclick="addChecklistItem()">+ إضافة بند</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">ملخص التدريب</div>
+      <textarea id="r_training" rows="3">${d.training_summary || ''}</textarea>
+    </div>
+
+    <div class="card">
+      <div class="card-title">المشاكل والإجراءات</div>
+      <div id="issues"></div>
+      <button class="btn-secondary" onclick="addIssueItem()">+ إضافة مشكلة</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">حالة الـ Go-Live والتوصية</div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>الحالة</label>
+        <select id="r_status">
+          <option value="قيد المراجعة" ${d.go_live_status === 'قيد المراجعة' ? 'selected' : ''}>قيد المراجعة</option>
+          <option value="جاهز" ${d.go_live_status === 'جاهز' ? 'selected' : ''}>جاهز</option>
+          <option value="غير جاهز" ${d.go_live_status === 'غير جاهز' ? 'selected' : ''}>غير جاهز</option>
+        </select>
+      </div>
+      <textarea id="r_recommendation" rows="2" placeholder="توصية مهندس الميدان">${d.field_engineer_recommendation || ''}</textarea>
+    </div>
+
+    <div class="card">
+      <div class="card-title">التوقيع</div>
+      <div class="grid2">
+        <div class="field"><label>اسم مهندس الميدان (توقيع)</label><input id="r_sign_eng" value="${d.signed_by_engineer || ''}"></div>
+        <div class="field"><label>اسم ممثل العميل (توقيع)</label><input id="r_sign_client" value="${d.signed_by_client || ''}"></div>
+        <div class="field"><label>تاريخ التوقيع</label><input id="r_sign_date" type="date" value="${d.sign_off_date || ''}"></div>
+      </div>
+    </div>
+  `;
+  renderListRows('checklist', d.installation_checklist || [], ['بند'], 'item-row', true);
+  renderListRows('issues', d.issues || [], ['المشكلة', 'الإجراء'], 'issue-row', false);
+}
+
+function renderListRows(containerId, items, labels, rowClass, hasDone) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  items.forEach(it => addRow(containerId, rowClass, hasDone, it));
+}
+
+function addRow(containerId, rowClass, hasDone, existing) {
+  const el = document.getElementById(containerId);
+  const rid = containerId + '_' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const div = document.createElement('div');
+  div.className = rowClass;
+  div.setAttribute('data-id', rid);
+  if (rowClass === 'item-row') {
+    div.innerHTML = `
+      <input type="text" placeholder="بند التركيب" id="${rid}_text" value="${(existing && existing.item) || ''}">
+      <select id="${rid}_done"><option value="لا" ${existing && existing.done === false ? 'selected' : ''}>لسه</option><option value="تم" ${existing && existing.done === true ? 'selected' : ''}>تم</option></select>
+      <button onclick="this.parentElement.remove()">✕</button>
+    `;
+  } else {
+    div.innerHTML = `
+      <input type="text" placeholder="المشكلة" id="${rid}_issue" value="${(existing && existing.issue) || ''}">
+      <input type="text" placeholder="الإجراء المتخذ" id="${rid}_action" value="${(existing && existing.action) || ''}">
+      <input type="text" placeholder="المسؤول" id="${rid}_owner" value="${(existing && existing.owner) || ''}">
+      <button onclick="this.parentElement.remove()">✕</button>
+    `;
+  }
+  el.appendChild(div);
+}
+
+function addChecklistItem() { addRow('checklist', 'item-row', true, null); }
+function addIssueItem() { addRow('issues', 'issue-row', false, null); }
+
+function collectChecklist() {
+  return Array.from(document.querySelectorAll('#checklist .item-row')).map(r => {
+    const rid = r.getAttribute('data-id');
+    return { item: document.getElementById(rid + '_text').value.trim(), done: document.getElementById(rid + '_done').value === 'تم' };
+  }).filter(x => x.item);
+}
+function collectIssues() {
+  return Array.from(document.querySelectorAll('#issues .issue-row')).map(r => {
+    const rid = r.getAttribute('data-id');
+    return {
+      issue: document.getElementById(rid + '_issue').value.trim(),
+      action: document.getElementById(rid + '_action').value.trim(),
+      owner: document.getElementById(rid + '_owner').value.trim(),
+    };
+  }).filter(x => x.issue || x.action);
+}
+
+async function saveReport() {
+  const d = {
+    client_id: clientId,
+    engineer_name: document.getElementById('r_engineer').value.trim(),
+    activation_date: document.getElementById('r_activation').value,
+    hardware_notes: document.getElementById('r_hardware').value.trim(),
+    installation_checklist: collectChecklist(),
+    training_summary: document.getElementById('r_training').value.trim(),
+    issues: collectIssues(),
+    go_live_status: document.getElementById('r_status').value,
+    field_engineer_recommendation: document.getElementById('r_recommendation').value.trim(),
+    signed_by_engineer: document.getElementById('r_sign_eng').value.trim(),
+    signed_by_client: document.getElementById('r_sign_client').value.trim(),
+    sign_off_date: document.getElementById('r_sign_date').value,
+    created_by: currentProfile.id,
+  };
+  if (report && report.id) {
+    await sb.from('implementation_reports').update(d).eq('id', report.id);
+  } else {
+    const { data } = await sb.from('implementation_reports').insert(d).select().single();
+    report = data;
+  }
+  alert('تم الحفظ');
+}
+
+function printReport() {
+  const d = {
+    engineer_name: document.getElementById('r_engineer').value,
+    activation_date: document.getElementById('r_activation').value,
+    hardware_notes: document.getElementById('r_hardware').value,
+    checklist: collectChecklist(),
+    training_summary: document.getElementById('r_training').value,
+    issues: collectIssues(),
+    status: document.getElementById('r_status').value,
+    recommendation: document.getElementById('r_recommendation').value,
+    sign_eng: document.getElementById('r_sign_eng').value,
+    sign_client: document.getElementById('r_sign_client').value,
+    sign_date: document.getElementById('r_sign_date').value,
+  };
+  document.getElementById('print-view').innerHTML = `
+    <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
+      <h2 style="color:#0B2C52;">تقرير التنفيذ والـ Go-Live — ${client.name || ''}</h2>
+      <p><b>الدولة:</b> ${client.country || '-'} | <b>مهندس الميدان:</b> ${d.engineer_name || '-'} | <b>تاريخ التفعيل:</b> ${d.activation_date || '-'}</p>
+      <h3>ملاحظات الهاردوير والتركيب</h3><p>${d.hardware_notes || '-'}</p>
+      <h3>Checklist التركيب</h3>
+      <ul>${d.checklist.map(c => `<li>${c.item} — ${c.done ? 'تم' : 'لسه'}</li>`).join('') || '<li>-</li>'}</ul>
+      <h3>ملخص التدريب</h3><p>${d.training_summary || '-'}</p>
+      <h3>المشاكل والإجراءات</h3>
+      <ul>${d.issues.map(i => `<li>${i.issue} — ${i.action} (${i.owner || '-'})</li>`).join('') || '<li>-</li>'}</ul>
+      <h3>حالة الـ Go-Live: ${d.status}</h3>
+      <p><b>توصية مهندس الميدان:</b> ${d.recommendation || '-'}</p>
+      <h3>التوقيع</h3>
+      <p>مهندس الميدان: ${d.sign_eng || '____________'} &nbsp;&nbsp; ممثل العميل: ${d.sign_client || '____________'} &nbsp;&nbsp; التاريخ: ${d.sign_date || '-'}</p>
+    </div>
+  `;
+  window.print();
+}
+</script>
+</body>
+</html>

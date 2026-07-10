@@ -22,12 +22,16 @@
       </div>
     </div>
     <div class="nav-links">
+      <input id="date-from" type="date" style="width:auto;" onchange="render()">
+      <span class="hint">إلى</span>
+      <input id="date-to" type="date" style="width:auto;" onchange="render()">
       <select id="country-filter" onchange="render()" style="width:auto;">
         <option value="">كل الدول</option>
         <option value="مصر">مصر</option>
         <option value="الكويت">الكويت</option>
         <option value="عُمان">عُمان</option>
       </select>
+      <button class="btn-secondary" onclick="exportPdf()">تصدير PDF</button>
       <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>

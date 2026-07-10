@@ -87,6 +87,7 @@ function render() {
         <button class="btn-secondary" onclick="setReview('${c.id}','تم الاستلام')">تحديد كمستلم</button>
         <button class="btn-secondary" onclick="setReview('${c.id}','يحتاج استكمال')">يحتاج استكمال</button>
         <button class="btn-secondary" onclick="openDebriefModal('${c.id}')">إضافة Debrief</button>
+        <a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">تقرير Go-Live</a>
       </div>
     `;
     el.appendChild(card);

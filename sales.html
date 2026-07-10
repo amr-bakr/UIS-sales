@@ -212,6 +212,7 @@ async function openClientModal(c) {
       <div class="field"><label>اعتراضات</label><input id="db_obj" type="text"></div>
       <div class="field"><label>الخطوة التالية</label><input id="db_next" type="text"></div>
       <button class="btn-secondary" style="margin-top:8px;" onclick="addDebrief('${c.id}')">إضافة Debrief</button>
+      <div style="margin-top:10px;"><a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">عرض تقرير Go-Live</a></div>
     </div>
   </div>`;
 }
