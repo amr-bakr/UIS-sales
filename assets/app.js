@@ -22,6 +22,17 @@ function stageLabel(key) {
   return s ? s.label : key;
 }
 
+// ---------- الأمان: تنظيف أي نص المستخدم كتبه قبل حقنه في الصفحة ----------
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ---------- Phase 3: الماليات والتوقعات ----------
 // احتمالية الإغلاق التلقائية حسب المرحلة — تقدر تعدّل النسب دي براحتك
 const STAGE_PROBABILITY = {
@@ -52,6 +63,25 @@ function monthKey(dateStr) {
   if (!dateStr) return null;
   return dateStr.slice(0, 7); // "2026-07-15" → "2026-07"
 }
+
+// ---------- Phase 4: تتبّع مرحلة التنفيذ بعد كسب الصفقة ----------
+const IMPLEMENTATION_STAGES = [
+  'العقد موقّع',
+  'تركيب الهاردوير',
+  'إدخال البيانات',
+  'التدريب',
+  'اختبار تجريبي',
+  'Go-Live فعلي',
+];
+
+function implementationBadgeClass(stage) {
+  if (stage === 'Go-Live فعلي') return 'badge-received';
+  if (!stage) return 'badge-pending';
+  return 'badge-stage';
+}
+
+// ---------- Phase 6: مصادر العملاء ----------
+const LEAD_SOURCES = ['إحالة عميل', 'معرض / فعالية', 'اتصال بارد', 'موقع الشركة', 'سوشيال ميديا', 'أخرى'];
 
 function reviewBadgeClass(status) {
   if (status === 'تم الاستلام') return 'badge-received';
@@ -94,28 +124,29 @@ async function logout() {
 
 // ---------- Summary builder (used everywhere a client record is displayed) ----------
 function buildClientSummary(d) {
+  const e = escapeHtml;
   let lines = [];
-  lines.push('العميل: ' + (d.name || '-') + ' | رقم التواصل: ' + (d.phone || '-'));
-  lines.push('النشاط: ' + (d.activity || '-') + ' | عدد الفروع: ' + (d.branches || '-') + ' | المستخدمين: ' + (d.users_count || '-'));
-  lines.push('مطبخ / مصنع مركزي: ' + (d.warehouse || '-') + ' | عدد المخازن: ' + (d.warehouse_count || '-'));
-  lines.push('المسؤول: ' + (d.contact || '-') + ' | الدولة: ' + (d.country || '-'));
+  lines.push('العميل: ' + e(d.name || '-') + ' | رقم التواصل: ' + e(d.phone || '-'));
+  lines.push('النشاط: ' + e(d.activity || '-') + ' | عدد الفروع: ' + e(d.branches || '-') + ' | المستخدمين: ' + e(d.users_count || '-'));
+  lines.push('مطبخ / مصنع مركزي: ' + e(d.warehouse || '-') + ' | عدد المخازن: ' + e(d.warehouse_count || '-'));
+  lines.push('المسؤول: ' + e(d.contact || '-') + ' | الدولة: ' + e(d.country || '-'));
   lines.push('');
-  lines.push('النظام الحالي: ' + (d.has_system || '-') + (d.sys_name ? (' — ' + d.sys_name) : '') + (d.sys_age ? (' — منذ ' + d.sys_age) : '') + (d.sys_type ? (' — ' + d.sys_type) : ''));
+  lines.push('النظام الحالي: ' + e(d.has_system || '-') + (d.sys_name ? (' — ' + e(d.sys_name)) : '') + (d.sys_age ? (' — منذ ' + e(d.sys_age)) : '') + (d.sys_type ? (' — ' + e(d.sys_type)) : ''));
   lines.push('');
   const problems = d.problems || [];
   lines.push('المشاكل:');
   if (problems.length === 0) lines.push('  (لا يوجد)');
-  problems.forEach((p, i) => lines.push('  ' + (i + 1) + '. ' + p.issue + (p.detail ? (' — ' + p.detail) : '') + (p.priority ? (' [' + p.priority + ']') : '')));
+  problems.forEach((p, i) => lines.push('  ' + (i + 1) + '. ' + e(p.issue) + (p.detail ? (' — ' + e(p.detail)) : '') + (p.priority ? (' [' + e(p.priority) + ']') : '')));
   lines.push('');
-  lines.push('الاحتياجات والتقارير: ' + (d.needs || '-'));
+  lines.push('الاحتياجات والتقارير: ' + e(d.needs || '-'));
   lines.push('');
   const modules = d.modules || [];
-  lines.push('الموديولات المطلوبة: ' + (modules.length ? modules.join('، ') : '-'));
+  lines.push('الموديولات المطلوبة: ' + (modules.length ? e(modules.join('، ')) : '-'));
   lines.push('');
-  lines.push('حضور الديمو: ' + (d.attendees || '-') + ' | صاحب القرار: ' + (d.decision || '-'));
-  lines.push('الإدارة المالية: ' + (d.finance || '-') + ' | التشغيل: ' + (d.ops || '-'));
+  lines.push('حضور الديمو: ' + e(d.attendees || '-') + ' | صاحب القرار: ' + e(d.decision || '-'));
+  lines.push('الإدارة المالية: ' + e(d.finance || '-') + ' | التشغيل: ' + e(d.ops || '-'));
   lines.push('');
-  lines.push('الديمو المقترح: ' + (d.demo_date || '-') + ' ' + (d.demo_time || '') + ' — ' + (d.demo_place || '-'));
+  lines.push('الديمو المقترح: ' + e(d.demo_date || '-') + ' ' + e(d.demo_time || '') + ' — ' + e(d.demo_place || '-'));
   return lines.join('\n');
 }
 
