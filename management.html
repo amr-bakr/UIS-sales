@@ -37,6 +37,7 @@
   </div>
 
   <div class="stat-grid" id="stats"></div>
+  <div class="stat-grid" id="finance-stats"></div>
 
   <div class="card">
     <div class="card-title">توزيع العملاء حسب المرحلة</div>
@@ -44,33 +45,92 @@
   </div>
 
   <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div class="card-title" style="margin:0;">التارجت مقابل الفعلي</div>
+      <input id="target-month" type="month" onchange="render()" style="width:auto;">
+    </div>
+    <canvas id="targetChart" height="90"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">تحديد التارجت الشهري لكل سيلز</div>
+    <div class="grid2">
+      <div class="field"><label>السيلز</label><select id="target-sales-select"></select></div>
+      <div class="field"><label>الشهر</label><input id="target-input-month" type="month"></div>
+      <div class="field"><label>قيمة التارجت</label><input id="target-amount" type="number" min="0"></div>
+      <div class="field"><label>العملة</label>
+        <select id="target-currency"><option value="EGP">جنيه مصري</option><option value="KWD">دينار كويتي</option><option value="OMR">ريال عُماني</option></select>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:10px;" onclick="saveTarget()">حفظ التارجت</button>
+    <div id="target-save-msg" class="hint" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
     <div class="card-title">أداء كل سيلز</div>
-    <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th></tr></thead><tbody></tbody></table>
+    <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th><th>قيمة مرجّحة (USD)</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
+
+<div id="print-view" style="display:none;"></div>
+<style>
+  @media print {
+    body * { visibility:hidden; }
+    #print-view, #print-view * { visibility:visible; }
+    #print-view { display:block !important; position:absolute; top:0; right:0; left:0; padding:20px; }
+  }
+</style>
 
 <script src="assets/app.js"></script>
 <script>
 let currentProfile = null;
 let allClients = [];
 let profilesById = {};
+let allTargets = [];
 let chartInstance = null;
+let targetChartInstance = null;
 
 (async function init() {
   currentProfile = await requireRole(['admin']);
   if (!currentProfile) return;
   document.getElementById('who').textContent = (currentProfile.full_name || 'الإدارة');
+
   const { data: profiles } = await sb.from('profiles').select('*');
   (profiles || []).forEach(p => profilesById[p.id] = p);
+
+  const salesSelect = document.getElementById('target-sales-select');
+  salesSelect.innerHTML = (profiles || []).filter(p => p.role === 'sales')
+    .map(p => `<option value="${p.id}">${p.full_name || p.id}</option>`).join('');
+
+  const now = new Date();
+  const curMonth = now.toISOString().slice(0, 7);
+  document.getElementById('target-month').value = curMonth;
+  document.getElementById('target-input-month').value = curMonth;
+
   const { data, error } = await sb.from('clients').select('*');
   if (error) { alert('خطأ: ' + error.message); return; }
   allClients = data || [];
+
+  const { data: targets } = await sb.from('sales_targets').select('*');
+  allTargets = targets || [];
+
   render();
 })();
 
-function render() {
+function filteredClients() {
   const country = document.getElementById('country-filter').value;
-  const items = country ? allClients.filter(c => c.country === country) : allClients;
+  const from = document.getElementById('date-from').value;
+  const to = document.getElementById('date-to').value;
+  return allClients.filter(c => {
+    if (country && c.country !== country) return false;
+    if (from && c.created_at < from) return false;
+    if (to && c.created_at > (to + 'T23:59:59')) return false;
+    return true;
+  });
+}
+
+function render() {
+  const items = filteredClients();
 
   const total = items.length;
   const won = items.filter(c => c.stage === 'won').length;
@@ -85,35 +145,119 @@ function render() {
     <div class="stat-card"><div class="stat-value">${needsCompletion}</div><div class="stat-label">نماذج تحتاج استكمال بيانات</div></div>
   `;
 
+  // ---------- Phase 3: KPIs مالية ----------
+  const openDeals = items.filter(c => c.stage !== 'won' && c.stage !== 'lost');
+  const weightedPipelineUsd = openDeals.reduce((sum, c) => sum + toUSD(weightedValue(c), c.currency), 0);
+  const wonUsd = items.filter(c => c.stage === 'won').reduce((sum, c) => sum + toUSD(c.deal_value, c.currency), 0);
+  const targetMonth = document.getElementById('target-month').value;
+  const wonThisMonth = items.filter(c => c.stage === 'won' && monthKey(c.expected_close_date) === targetMonth)
+    .reduce((sum, c) => sum + toUSD(c.deal_value, c.currency), 0);
+  const targetsThisMonth = allTargets.filter(t => t.month.slice(0, 7) === targetMonth)
+    .reduce((sum, t) => sum + toUSD(t.target_amount, t.currency), 0);
+  const achievement = targetsThisMonth ? Math.round((wonThisMonth / targetsThisMonth) * 100) : 0;
+
+  document.getElementById('finance-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-value">$${Math.round(weightedPipelineUsd).toLocaleString()}</div><div class="stat-label">قيمة الـ Pipeline المرجّحة (تقديري)</div></div>
+    <div class="stat-card"><div class="stat-value">$${Math.round(wonUsd).toLocaleString()}</div><div class="stat-label">إجمالي قيمة العملاء المُغلَقين</div></div>
+    <div class="stat-card"><div class="stat-value">$${Math.round(wonThisMonth).toLocaleString()}</div><div class="stat-label">إيراد فعلي — الشهر المحدد</div></div>
+    <div class="stat-card"><div class="stat-value">${achievement}%</div><div class="stat-label">نسبة تحقيق التارجت — الشهر المحدد</div></div>
+  `;
+
   const stageCounts = STAGES.map(s => items.filter(c => c.stage === s.key).length);
   if (chartInstance) chartInstance.destroy();
   chartInstance = new Chart(document.getElementById('stageChart'), {
     type: 'bar',
-    data: {
-      labels: STAGES.map(s => s.label),
-      datasets: [{ data: stageCounts, backgroundColor: '#1D63B3', borderRadius: 6 }]
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-    }
+    data: { labels: STAGES.map(s => s.label), datasets: [{ data: stageCounts, backgroundColor: '#1D63B3', borderRadius: 6 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
   });
+
+  renderTargetChart(items, targetMonth);
 
   const bySales = {};
   items.forEach(c => {
     const key = c.sales_id || 'unknown';
-    if (!bySales[key]) bySales[key] = { total: 0, won: 0, lost: 0, needs: 0 };
+    if (!bySales[key]) bySales[key] = { total: 0, won: 0, lost: 0, needs: 0, weighted: 0 };
     bySales[key].total++;
     if (c.stage === 'won') bySales[key].won++;
     if (c.stage === 'lost') bySales[key].lost++;
     if (c.review_status === 'يحتاج استكمال') bySales[key].needs++;
+    bySales[key].weighted += toUSD(weightedValue(c), c.currency);
   });
   const tbody = document.querySelector('#salesTable tbody');
   tbody.innerHTML = Object.entries(bySales).map(([id, s]) => `
     <tr>
       <td>${(profilesById[id] && profilesById[id].full_name) || 'غير معروف'}</td>
       <td>${s.total}</td><td>${s.won}</td><td>${s.lost}</td><td>${s.needs}</td>
-    </tr>`).join('') || '<tr><td colspan="5" class="hint">لا توجد بيانات</td></tr>';
+      <td>$${Math.round(s.weighted).toLocaleString()}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="hint">لا توجد بيانات</td></tr>';
+}
+
+function renderTargetChart(items, targetMonth) {
+  const salesReps = Object.values(profilesById).filter(p => p.role === 'sales');
+  const labels = salesReps.map(p => p.full_name || p.id);
+  const actuals = salesReps.map(p =>
+    items.filter(c => c.sales_id === p.id && c.stage === 'won' && monthKey(c.expected_close_date) === targetMonth)
+      .reduce((sum, c) => sum + toUSD(c.deal_value, c.currency), 0)
+  );
+  const targets = salesReps.map(p => {
+    const t = allTargets.find(t => t.sales_id === p.id && t.month.slice(0, 7) === targetMonth);
+    return t ? toUSD(t.target_amount, t.currency) : 0;
+  });
+
+  if (targetChartInstance) targetChartInstance.destroy();
+  targetChartInstance = new Chart(document.getElementById('targetChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'التارجت', data: targets, backgroundColor: '#CFE0F2', borderRadius: 6 },
+        { label: 'الفعلي', data: actuals, backgroundColor: '#1D63B3', borderRadius: 6 },
+      ]
+    },
+    options: { scales: { y: { beginAtZero: true } } }
+  });
+}
+
+async function saveTarget() {
+  const msgEl = document.getElementById('target-save-msg');
+  const sales_id = document.getElementById('target-sales-select').value;
+  const month = document.getElementById('target-input-month').value + '-01';
+  const target_amount = document.getElementById('target-amount').value || 0;
+  const currency = document.getElementById('target-currency').value;
+  const { error } = await sb.from('sales_targets').upsert(
+    { sales_id, month, target_amount, currency },
+    { onConflict: 'sales_id,month' }
+  );
+  if (error) { msgEl.textContent = 'خطأ: ' + error.message; return; }
+  msgEl.textContent = 'تم حفظ التارجت.';
+  const { data: targets } = await sb.from('sales_targets').select('*');
+  allTargets = targets || [];
+  render();
+}
+
+function exportPdf() {
+  const items = filteredClients();
+  const from = document.getElementById('date-from').value || 'البداية';
+  const to = document.getElementById('date-to').value || 'الآن';
+  const statsHtml = document.getElementById('stats').innerHTML;
+  const financeHtml = document.getElementById('finance-stats').innerHTML;
+  const chartImg = document.getElementById('stageChart').toDataURL('image/png');
+  const targetChartImg = document.getElementById('targetChart').toDataURL('image/png');
+  const tableHtml = document.getElementById('salesTable').outerHTML;
+  document.getElementById('print-view').innerHTML = `
+    <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
+      <h2 style="color:#0B2C52;">تقرير الإدارة — من ${from} إلى ${to}</h2>
+      <div style="display:flex; flex-wrap:wrap; gap:10px;">${statsHtml}</div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${financeHtml}</div>
+      <h3>توزيع العملاء حسب المرحلة</h3>
+      <img src="${chartImg}" style="max-width:100%;">
+      <h3>التارجت مقابل الفعلي</h3>
+      <img src="${targetChartImg}" style="max-width:100%;">
+      <h3>أداء كل سيلز</h3>
+      ${tableHtml}
+    </div>
+  `;
+  window.print();
 }
 </script>
 </body>

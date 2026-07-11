@@ -2,8 +2,8 @@
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -22,6 +22,37 @@ function stageLabel(key) {
   return s ? s.label : key;
 }
 
+// ---------- Phase 3: الماليات والتوقعات ----------
+// احتمالية الإغلاق التلقائية حسب المرحلة — تقدر تعدّل النسب دي براحتك
+const STAGE_PROBABILITY = {
+  discovery: 0.10, demo_scheduled: 0.25, demo_done: 0.40,
+  proposal: 0.60, negotiation: 0.75, won: 1, lost: 0,
+};
+
+// سعر الصرف التقريبي لكل عملة مقابل الدولار — عدّل الأرقام دي لما الأسعار تتغيّر
+const CURRENCY_TO_USD = { EGP: 1 / 49, KWD: 3.25, OMR: 2.6 };
+
+function weightedValue(client) {
+  const val = Number(client.deal_value) || 0;
+  const prob = STAGE_PROBABILITY[client.stage] ?? 0;
+  return val * prob;
+}
+
+function toUSD(amount, currency) {
+  const rate = CURRENCY_TO_USD[currency] || 1;
+  return (Number(amount) || 0) * rate;
+}
+
+function formatMoney(amount, currency) {
+  const n = Number(amount) || 0;
+  return Math.round(n).toLocaleString('ar-EG') + (currency ? (' ' + currency) : '');
+}
+
+function monthKey(dateStr) {
+  if (!dateStr) return null;
+  return dateStr.slice(0, 7); // "2026-07-15" → "2026-07"
+}
+
 function reviewBadgeClass(status) {
   if (status === 'تم الاستلام') return 'badge-received';
   if (status === 'يحتاج استكمال') return 'badge-needs';
@@ -30,12 +61,17 @@ function reviewBadgeClass(status) {
 
 // ---------- Auth helpers ----------
 async function getCurrentProfile() {
-  const { data: sessionData } = await sb.auth.getSession();
-  if (!sessionData || !sessionData.session) return null;
-  const userId = sessionData.session.user.id;
-  const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
-  if (error) return null;
-  return data;
+  try {
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData || !sessionData.session) return null;
+    const userId = sessionData.session.user.id;
+    const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+    if (error) return null;
+    return data;
+  } catch (e) {
+    console.error('getCurrentProfile failed:', e);
+    return null;
+  }
 }
 
 async function requireRole(allowedRoles) {

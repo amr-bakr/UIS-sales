@@ -65,6 +65,7 @@ function renderKanban() {
       card.innerHTML = `
         <div class="kanban-card-name">${c.name || '-'}</div>
         <div class="kanban-card-meta">${c.phone || ''}</div>
+        <div class="kanban-card-meta">${c.deal_value ? formatMoney(c.deal_value, c.currency) : ''}</div>
         <div style="margin-top:6px;"><span class="badge-pill ${reviewBadgeClass(c.review_status)}">${c.review_status}</span></div>
       `;
       col.appendChild(card);
@@ -127,6 +128,14 @@ function discoveryFormHtml(prefix) {
       <label class="chip"><input type="checkbox" value="Accounting"> Accounting</label>
       <label class="chip"><input type="checkbox" value="Dashboard"> Dashboard</label>
     </div>
+    <div class="card-title" style="margin-top:16px;">البيانات المالية</div>
+    <div class="grid2">
+      <div class="field"><label>قيمة الصفقة المتوقعة</label><input id="${prefix}_dealValue" type="number" min="0" placeholder="مثال: 50000"></div>
+      <div class="field"><label>العملة</label>
+        <select id="${prefix}_currency"><option value="EGP">جنيه مصري</option><option value="KWD">دينار كويتي</option><option value="OMR">ريال عُماني</option></select>
+      </div>
+      <div class="field"><label>تاريخ الإغلاق المتوقع</label><input id="${prefix}_expectedClose" type="date"></div>
+    </div>
     <div class="card-title" style="margin-top:16px;">الحضور وصاحب القرار وتوصية الديمو</div>
     <div class="grid2">
       <div class="field"><label>مين هيحضر الديمو؟</label><input id="${prefix}_attendees" type="text"></div>
@@ -177,6 +186,7 @@ async function submitNewClient() {
     has_system: v('new_hasSystem'), sys_name: v('new_sysName'), sys_age: v('new_sysAge'), sys_type: v('new_sysType'),
     problems: collectProblemsFromDom('new_problems'), needs: v('new_needs'),
     modules: collectModulesFrom('new'),
+    deal_value: v('new_dealValue'), currency: v('new_currency') || 'EGP', expected_close_date: v('new_expectedClose'),
     attendees: v('new_attendees'), decision: v('new_decision'), finance: v('new_finance'), ops: v('new_ops'),
     demo_date: v('new_demoDate'), demo_time: v('new_demoTime'), demo_place: v('new_demoPlace'),
     sales_id: currentProfile.id, stage: 'discovery', review_status: 'بانتظار المراجعة',
@@ -200,6 +210,19 @@ async function openClientModal(c) {
         <select id="stage-select">${STAGES.map(s => `<option value="${s.key}" ${s.key === c.stage ? 'selected' : ''}>${s.label}</option>`).join('')}</select>
       </div>
       <button class="btn-secondary" onclick="updateStage('${c.id}')">تحديث المرحلة</button>
+      <div class="grid2" style="margin-top:14px;">
+        <div class="field"><label>قيمة الصفقة</label><input id="deal-value" type="number" min="0" value="${c.deal_value || ''}"></div>
+        <div class="field"><label>العملة</label>
+          <select id="deal-currency">
+            <option value="EGP" ${c.currency === 'EGP' ? 'selected' : ''}>جنيه مصري</option>
+            <option value="KWD" ${c.currency === 'KWD' ? 'selected' : ''}>دينار كويتي</option>
+            <option value="OMR" ${c.currency === 'OMR' ? 'selected' : ''}>ريال عُماني</option>
+          </select>
+        </div>
+        <div class="field"><label>تاريخ الإغلاق المتوقع</label><input id="deal-close" type="date" value="${c.expected_close_date || ''}"></div>
+        <div class="field"><label>القيمة المرجّحة (حسب المرحلة)</label><input value="${formatMoney(weightedValue(c), c.currency)}" disabled></div>
+      </div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="updateFinancials('${c.id}')">حفظ البيانات المالية</button>
       <div class="summary-box" style="margin-top:14px;">${buildClientSummary(c)}</div>
       <div class="card-title" style="margin-top:16px;">Debrief</div>
       <div id="debrief-list">${(debriefs || []).map(db => `
@@ -220,6 +243,17 @@ async function openClientModal(c) {
 async function updateStage(clientId) {
   const stage = document.getElementById('stage-select').value;
   await sb.from('clients').update({ stage }).eq('id', clientId);
+  closeModal();
+  await loadClients();
+}
+
+async function updateFinancials(clientId) {
+  const d = {
+    deal_value: document.getElementById('deal-value').value || 0,
+    currency: document.getElementById('deal-currency').value,
+    expected_close_date: document.getElementById('deal-close').value,
+  };
+  await sb.from('clients').update(d).eq('id', clientId);
   closeModal();
   await loadClients();
 }
