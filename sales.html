@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>مساحة السيلز — UIS</title>
+<title>نظام إدارة العملاء — السيلز</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
@@ -26,7 +26,7 @@
     </div>
   </div>
 
-  <div class="kanban" id="kanban"></div>
+  <div class="kanban" id="kanban"><div class="empty-state"><span class="spinner"></span> جارِ تحميل العملاء...</div></div>
 </div>
 
 <div id="modal-root"></div>
@@ -45,7 +45,7 @@ let allClients = [];
 
 async function loadClients() {
   const { data, error } = await sb.from('clients').select('*').eq('sales_id', currentProfile.id).order('created_at', { ascending: false });
-  if (error) { alert('خطأ في تحميل العملاء: ' + error.message); return; }
+  if (error) { showToast('خطأ في تحميل العملاء: ' + error.message, 'error'); return; }
   allClients = data || [];
   renderKanban();
 }
@@ -58,6 +58,9 @@ function renderKanban() {
     col.className = 'kanban-col';
     const items = allClients.filter(c => c.stage === stage.key);
     col.innerHTML = `<div class="kanban-col-title"><span>${stage.label}</span><span>${items.length}</span></div>`;
+    if (items.length === 0) {
+      col.innerHTML += '<div class="hint" style="text-align:center; padding:16px 4px;">لا يوجد عملاء هنا</div>';
+    }
     items.forEach(c => {
       const card = document.createElement('div');
       card.className = 'kanban-card';
@@ -86,7 +89,7 @@ function openNewClientModal() {
       <div class="modal-head"><div class="card-title" style="margin:0;">عميل جديد — نموذج الاكتشاف</div><button class="modal-close" onclick="closeModal()">✕</button></div>
       ${discoveryFormHtml('new')}
       <div id="new-error" class="error-box" style="display:none;"></div>
-      <button class="btn-primary" style="width:100%; margin-top:12px;" onclick="submitNewClient()">حفظ العميل</button>
+      <button class="btn-primary" id="new-client-save-btn" style="width:100%; margin-top:12px;" onclick="submitNewClient()">حفظ العميل</button>
     </div>
   </div>`;
   initProblemRows('new');
@@ -182,9 +185,12 @@ function v(id) { const el = document.getElementById(id); return el ? el.value.tr
 
 async function submitNewClient() {
   const errEl = document.getElementById('new-error');
+  const btn = document.getElementById('new-client-save-btn');
   errEl.style.display = 'none';
   const name = v('new_name');
   if (!name) { errEl.textContent = 'اكتب اسم العميل.'; errEl.style.display = 'block'; return; }
+  btn.disabled = true;
+  btn.innerHTML = 'جارِ الحفظ<span class="spinner"></span>';
   const d = {
     name, phone: v('new_phone'), country: v('new_country'),
     activity: v('new_activity'), branches: v('new_branches'), users_count: v('new_users'),
@@ -199,7 +205,14 @@ async function submitNewClient() {
     sales_id: currentProfile.id, stage: 'discovery', review_status: 'بانتظار المراجعة',
   };
   const { error } = await sb.from('clients').insert(d);
-  if (error) { errEl.textContent = 'خطأ: ' + error.message; errEl.style.display = 'block'; return; }
+  if (error) {
+    errEl.textContent = 'خطأ: ' + error.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'حفظ العميل';
+    return;
+  }
+  showToast('تم حفظ العميل بنجاح', 'success');
   closeModal();
   await loadClients();
 }
@@ -293,6 +306,7 @@ async function openClientModal(c) {
 async function updateStage(clientId) {
   const stage = document.getElementById('stage-select').value;
   await sb.from('clients').update({ stage }).eq('id', clientId);
+  showToast('تم تحديث المرحلة', 'success');
   closeModal();
   await loadClients();
 }
@@ -305,6 +319,7 @@ async function updateFinancials(clientId) {
     lead_source: document.getElementById('deal-leadsource').value || null,
   };
   await sb.from('clients').update(d).eq('id', clientId);
+  showToast('تم حفظ البيانات المالية', 'success');
   closeModal();
   await loadClients();
 }
@@ -316,6 +331,7 @@ async function updateRenewal(clientId) {
     renewal_value: document.getElementById('renewal-value').value || 0,
   };
   await sb.from('clients').update(d).eq('id', clientId);
+  showToast('تم حفظ بيانات العقد', 'success');
   closeModal();
   await loadClients();
 }
@@ -323,6 +339,7 @@ async function updateRenewal(clientId) {
 async function updateImplementationStage(clientId) {
   const stage = document.getElementById('impl-stage').value || null;
   await sb.from('clients').update({ implementation_stage: stage }).eq('id', clientId);
+  showToast('تم تحديث مرحلة التنفيذ', 'success');
   closeModal();
   await loadClients();
 }
@@ -330,6 +347,7 @@ async function updateImplementationStage(clientId) {
 async function addDebrief(clientId) {
   const d = { client_id: clientId, created_by: currentProfile.id, went_well: v('db_well'), objections: v('db_obj'), next_step: v('db_next') };
   await sb.from('debriefs').insert(d);
+  showToast('تمت إضافة الـ Debrief', 'success');
   const c = allClients.find(x => x.id === clientId);
   openClientModal(c);
 }
@@ -343,6 +361,7 @@ async function logActivity(clientId) {
     notes: document.getElementById('act-notes').value.trim(),
   };
   await sb.from('activities').insert(d);
+  showToast('تم تسجيل النشاط', 'success');
   const c = allClients.find(x => x.id === clientId);
   openClientModal(c);
 }

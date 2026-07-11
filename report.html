@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تقرير التنفيذ والـ Go-Live — UIS</title>
+<title>نظام إدارة العملاء — تقرير Go-Live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
@@ -32,12 +32,12 @@
     </div>
     <div class="nav-links">
       <button class="btn-secondary" onclick="history.back()">رجوع</button>
-      <button class="btn-primary" onclick="saveReport()">حفظ</button>
+      <button class="btn-primary" id="save-report-btn" onclick="saveReport()">حفظ</button>
       <button class="btn-secondary" onclick="printReport()">تصدير PDF</button>
     </div>
   </div>
 
-  <div id="form-area"></div>
+  <div id="form-area"><div class="empty-state"><span class="spinner"></span> جارِ تحميل بيانات العميل...</div></div>
 </div>
 
 <div id="print-view"></div>
@@ -180,6 +180,9 @@ function collectIssues() {
 }
 
 async function saveReport() {
+  const btn = document.getElementById('save-report-btn');
+  btn.disabled = true;
+  btn.innerHTML = 'جارِ الحفظ<span class="spinner"></span>';
   const d = {
     client_id: clientId,
     engineer_name: document.getElementById('r_engineer').value.trim(),
@@ -195,13 +198,20 @@ async function saveReport() {
     sign_off_date: document.getElementById('r_sign_date').value,
     created_by: currentProfile.id,
   };
-  if (report && report.id) {
-    await sb.from('implementation_reports').update(d).eq('id', report.id);
-  } else {
-    const { data } = await sb.from('implementation_reports').insert(d).select().single();
-    report = data;
+  try {
+    if (report && report.id) {
+      await sb.from('implementation_reports').update(d).eq('id', report.id);
+    } else {
+      const { data } = await sb.from('implementation_reports').insert(d).select().single();
+      report = data;
+    }
+    showToast('تم الحفظ بنجاح', 'success');
+  } catch (e) {
+    showToast('حصل خطأ أثناء الحفظ', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'حفظ';
   }
-  alert('تم الحفظ');
 }
 
 function printReport() {

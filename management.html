@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لوحة الإدارة — UIS</title>
+<title>نظام إدارة العملاء — لوحة الإدارة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
     </div>
   </div>
 
-  <div class="stat-grid" id="stats"></div>
+  <div class="stat-grid" id="stats"><div class="empty-state"><span class="spinner"></span> جارِ تحميل الأرقام...</div></div>
   <div class="stat-grid" id="finance-stats"></div>
 
   <div class="card">
@@ -129,7 +129,7 @@ let targetChartInstance = null;
   document.getElementById('target-input-month').value = curMonth;
 
   const { data, error } = await sb.from('clients').select('*');
-  if (error) { alert('خطأ: ' + error.message); return; }
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
   allClients = data || [];
 
   const { data: targets } = await sb.from('sales_targets').select('*');
