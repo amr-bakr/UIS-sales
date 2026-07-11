@@ -67,6 +67,26 @@
   </div>
 
   <div class="card">
+    <div class="card-title">أداء مصادر العملاء</div>
+    <table class="data-table" id="leadSourceTable"><thead><tr><th>المصدر</th><th>عدد العملاء</th><th>فوز</th><th>نسبة الفوز</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">نشاط الفريق (حسب الفترة المحددة)</div>
+    <table class="data-table" id="activityTable"><thead><tr><th>السيلز</th><th>زيارات</th><th>مكالمات</th><th>متابعات</th><th>الإجمالي</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">مراحل التنفيذ الحالية (للصفقات المكسوبة)</div>
+    <table class="data-table" id="implTable"><thead><tr><th>المرحلة</th><th>عدد العملاء</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">عقود قريبة من التجديد (خلال 60 يوم)</div>
+    <table class="data-table" id="renewalTable"><thead><tr><th>العميل</th><th>تاريخ التجديد</th><th>الأيام المتبقية</th><th>قيمة التجديد</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
     <div class="card-title">أداء كل سيلز</div>
     <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th><th>قيمة مرجّحة (USD)</th></tr></thead><tbody></tbody></table>
   </div>
@@ -87,6 +107,7 @@ let currentProfile = null;
 let allClients = [];
 let profilesById = {};
 let allTargets = [];
+let allActivities = [];
 let chartInstance = null;
 let targetChartInstance = null;
 
@@ -113,6 +134,9 @@ let targetChartInstance = null;
 
   const { data: targets } = await sb.from('sales_targets').select('*');
   allTargets = targets || [];
+
+  const { data: activities } = await sb.from('activities').select('*');
+  allActivities = activities || [];
 
   render();
 })();
@@ -156,11 +180,20 @@ function render() {
     .reduce((sum, t) => sum + toUSD(t.target_amount, t.currency), 0);
   const achievement = targetsThisMonth ? Math.round((wonThisMonth / targetsThisMonth) * 100) : 0;
 
+  const todayMs = Date.now();
+  const upcomingRenewals = items
+    .filter(c => c.renewal_date)
+    .map(c => ({ ...c, daysLeft: Math.round((new Date(c.renewal_date).getTime() - todayMs) / 86400000) }))
+    .filter(c => c.daysLeft >= 0 && c.daysLeft <= 60)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+  const renewalCount = upcomingRenewals.length;
+
   document.getElementById('finance-stats').innerHTML = `
     <div class="stat-card"><div class="stat-value">$${Math.round(weightedPipelineUsd).toLocaleString()}</div><div class="stat-label">قيمة الـ Pipeline المرجّحة (تقديري)</div></div>
     <div class="stat-card"><div class="stat-value">$${Math.round(wonUsd).toLocaleString()}</div><div class="stat-label">إجمالي قيمة العملاء المُغلَقين</div></div>
     <div class="stat-card"><div class="stat-value">$${Math.round(wonThisMonth).toLocaleString()}</div><div class="stat-label">إيراد فعلي — الشهر المحدد</div></div>
     <div class="stat-card"><div class="stat-value">${achievement}%</div><div class="stat-label">نسبة تحقيق التارجت — الشهر المحدد</div></div>
+    <div class="stat-card"><div class="stat-value">${renewalCount}</div><div class="stat-label">عقود قريبة من التجديد (٦٠ يوم)</div></div>
   `;
 
   const stageCounts = STAGES.map(s => items.filter(c => c.stage === s.key).length);
@@ -172,6 +205,58 @@ function render() {
   });
 
   renderTargetChart(items, targetMonth);
+
+  const renewalTbody = document.querySelector('#renewalTable tbody');
+  renewalTbody.innerHTML = upcomingRenewals.map(c => `
+    <tr>
+      <td>${escapeHtml(c.name)}</td>
+      <td>${c.renewal_date}</td>
+      <td>${c.daysLeft} يوم</td>
+      <td>${formatMoney(c.renewal_value, c.currency)}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="hint">لا توجد عقود قريبة من التجديد</td></tr>';
+
+  const wonItems = items.filter(c => c.stage === 'won');
+  const implTbody = document.querySelector('#implTable tbody');
+  const implRows = IMPLEMENTATION_STAGES.map(s => `<tr><td>${s}</td><td>${wonItems.filter(c => c.implementation_stage === s).length}</td></tr>`).join('');
+  const notStartedCount = wonItems.filter(c => !c.implementation_stage).length;
+  implTbody.innerHTML = `<tr><td>لم تبدأ بعد</td><td>${notStartedCount}</td></tr>` + implRows;
+
+  const bySource = {};
+  items.forEach(c => {
+    const key = c.lead_source || 'غير محدد';
+    if (!bySource[key]) bySource[key] = { total: 0, won: 0 };
+    bySource[key].total++;
+    if (c.stage === 'won') bySource[key].won++;
+  });
+  const leadTbody = document.querySelector('#leadSourceTable tbody');
+  leadTbody.innerHTML = Object.entries(bySource).map(([source, s]) => `
+    <tr>
+      <td>${escapeHtml(source)}</td>
+      <td>${s.total}</td><td>${s.won}</td>
+      <td>${s.total ? Math.round((s.won / s.total) * 100) : 0}%</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="hint">لا توجد بيانات</td></tr>';
+
+  const from = document.getElementById('date-from').value;
+  const to = document.getElementById('date-to').value;
+  const filteredActivities = allActivities.filter(a => {
+    if (from && a.activity_date < from) return false;
+    if (to && a.activity_date > to) return false;
+    return true;
+  });
+  const bySalesActivity = {};
+  filteredActivities.forEach(a => {
+    const key = a.sales_id || 'unknown';
+    if (!bySalesActivity[key]) bySalesActivity[key] = { visit: 0, call: 0, follow: 0 };
+    if (a.activity_type === 'زيارة') bySalesActivity[key].visit++;
+    else if (a.activity_type === 'مكالمة') bySalesActivity[key].call++;
+    else bySalesActivity[key].follow++;
+  });
+  const activityTbody = document.querySelector('#activityTable tbody');
+  activityTbody.innerHTML = Object.entries(bySalesActivity).map(([id, a]) => `
+    <tr>
+      <td>${escapeHtml((profilesById[id] && profilesById[id].full_name) || 'غير معروف')}</td>
+      <td>${a.visit}</td><td>${a.call}</td><td>${a.follow}</td><td>${a.visit + a.call + a.follow}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="hint">لا يوجد نشاط مسجّل في الفترة دي</td></tr>';
 
   const bySales = {};
   items.forEach(c => {
@@ -186,7 +271,7 @@ function render() {
   const tbody = document.querySelector('#salesTable tbody');
   tbody.innerHTML = Object.entries(bySales).map(([id, s]) => `
     <tr>
-      <td>${(profilesById[id] && profilesById[id].full_name) || 'غير معروف'}</td>
+      <td>${escapeHtml((profilesById[id] && profilesById[id].full_name) || 'غير معروف')}</td>
       <td>${s.total}</td><td>${s.won}</td><td>${s.lost}</td><td>${s.needs}</td>
       <td>$${Math.round(s.weighted).toLocaleString()}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="hint">لا توجد بيانات</td></tr>';

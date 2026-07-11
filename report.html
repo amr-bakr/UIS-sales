@@ -55,9 +55,14 @@ const clientId = params.get('client');
   if (!currentProfile) return;
   if (!clientId) { document.getElementById('form-area').innerHTML = '<div class="error-box">مفيش عميل محدد.</div>'; return; }
 
-  const { data: c } = await sb.from('clients').select('*').eq('id', clientId).single();
+  const { data: c, error: clientErr } = await sb.from('clients').select('*').eq('id', clientId).single();
+  if (clientErr || !c) {
+    document.getElementById('form-area').innerHTML = '<div class="error-box">العميل ده مش موجود أو اتحذف.</div>';
+    document.querySelectorAll('.topbar .btn-primary, .topbar .nav-links .btn-secondary:not(:first-child)').forEach(b => b.style.display = 'none');
+    return;
+  }
   client = c;
-  document.getElementById('client-name').textContent = client ? client.name : '-';
+  document.getElementById('client-name').textContent = client.name;
 
   const { data: r } = await sb.from('implementation_reports').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1);
   report = (r && r[0]) || null;
@@ -70,16 +75,16 @@ function renderForm() {
     <div class="card">
       <div class="card-title">نظرة عامة على المشروع</div>
       <div class="grid2">
-        <div class="field"><label>اسم العميل</label><input value="${client.name || ''}" disabled></div>
-        <div class="field"><label>الدولة</label><input value="${client.country || ''}" disabled></div>
-        <div class="field"><label>اسم مهندس الميدان</label><input id="r_engineer" value="${d.engineer_name || ''}"></div>
-        <div class="field"><label>تاريخ التفعيل</label><input id="r_activation" type="date" value="${d.activation_date || ''}"></div>
+        <div class="field"><label>اسم العميل</label><input value="${escapeHtml(client.name || '')}" disabled></div>
+        <div class="field"><label>الدولة</label><input value="${escapeHtml(client.country || '')}" disabled></div>
+        <div class="field"><label>اسم مهندس الميدان</label><input id="r_engineer" value="${escapeHtml(d.engineer_name || '')}"></div>
+        <div class="field"><label>تاريخ التفعيل</label><input id="r_activation" type="date" value="${escapeHtml(d.activation_date || '')}"></div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-title">ملاحظات الهاردوير والتركيب</div>
-      <textarea id="r_hardware" rows="3">${d.hardware_notes || ''}</textarea>
+      <textarea id="r_hardware" rows="3">${escapeHtml(d.hardware_notes || '')}</textarea>
     </div>
 
     <div class="card">
@@ -90,7 +95,7 @@ function renderForm() {
 
     <div class="card">
       <div class="card-title">ملخص التدريب</div>
-      <textarea id="r_training" rows="3">${d.training_summary || ''}</textarea>
+      <textarea id="r_training" rows="3">${escapeHtml(d.training_summary || '')}</textarea>
     </div>
 
     <div class="card">
@@ -109,15 +114,15 @@ function renderForm() {
           <option value="غير جاهز" ${d.go_live_status === 'غير جاهز' ? 'selected' : ''}>غير جاهز</option>
         </select>
       </div>
-      <textarea id="r_recommendation" rows="2" placeholder="توصية مهندس الميدان">${d.field_engineer_recommendation || ''}</textarea>
+      <textarea id="r_recommendation" rows="2" placeholder="توصية مهندس الميدان">${escapeHtml(d.field_engineer_recommendation || '')}</textarea>
     </div>
 
     <div class="card">
       <div class="card-title">التوقيع</div>
       <div class="grid2">
-        <div class="field"><label>اسم مهندس الميدان (توقيع)</label><input id="r_sign_eng" value="${d.signed_by_engineer || ''}"></div>
-        <div class="field"><label>اسم ممثل العميل (توقيع)</label><input id="r_sign_client" value="${d.signed_by_client || ''}"></div>
-        <div class="field"><label>تاريخ التوقيع</label><input id="r_sign_date" type="date" value="${d.sign_off_date || ''}"></div>
+        <div class="field"><label>اسم مهندس الميدان (توقيع)</label><input id="r_sign_eng" value="${escapeHtml(d.signed_by_engineer || '')}"></div>
+        <div class="field"><label>اسم ممثل العميل (توقيع)</label><input id="r_sign_client" value="${escapeHtml(d.signed_by_client || '')}"></div>
+        <div class="field"><label>تاريخ التوقيع</label><input id="r_sign_date" type="date" value="${escapeHtml(d.sign_off_date || '')}"></div>
       </div>
     </div>
   `;
@@ -139,15 +144,15 @@ function addRow(containerId, rowClass, hasDone, existing) {
   div.setAttribute('data-id', rid);
   if (rowClass === 'item-row') {
     div.innerHTML = `
-      <input type="text" placeholder="بند التركيب" id="${rid}_text" value="${(existing && existing.item) || ''}">
+      <input type="text" placeholder="بند التركيب" id="${rid}_text" value="${escapeHtml((existing && existing.item) || '')}">
       <select id="${rid}_done"><option value="لا" ${existing && existing.done === false ? 'selected' : ''}>لسه</option><option value="تم" ${existing && existing.done === true ? 'selected' : ''}>تم</option></select>
       <button onclick="this.parentElement.remove()">✕</button>
     `;
   } else {
     div.innerHTML = `
-      <input type="text" placeholder="المشكلة" id="${rid}_issue" value="${(existing && existing.issue) || ''}">
-      <input type="text" placeholder="الإجراء المتخذ" id="${rid}_action" value="${(existing && existing.action) || ''}">
-      <input type="text" placeholder="المسؤول" id="${rid}_owner" value="${(existing && existing.owner) || ''}">
+      <input type="text" placeholder="المشكلة" id="${rid}_issue" value="${escapeHtml((existing && existing.issue) || '')}">
+      <input type="text" placeholder="الإجراء المتخذ" id="${rid}_action" value="${escapeHtml((existing && existing.action) || '')}">
+      <input type="text" placeholder="المسؤول" id="${rid}_owner" value="${escapeHtml((existing && existing.owner) || '')}">
       <button onclick="this.parentElement.remove()">✕</button>
     `;
   }
@@ -215,18 +220,18 @@ function printReport() {
   };
   document.getElementById('print-view').innerHTML = `
     <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
-      <h2 style="color:#0B2C52;">تقرير التنفيذ والـ Go-Live — ${client.name || ''}</h2>
-      <p><b>الدولة:</b> ${client.country || '-'} | <b>مهندس الميدان:</b> ${d.engineer_name || '-'} | <b>تاريخ التفعيل:</b> ${d.activation_date || '-'}</p>
-      <h3>ملاحظات الهاردوير والتركيب</h3><p>${d.hardware_notes || '-'}</p>
+      <h2 style="color:#0B2C52;">تقرير التنفيذ والـ Go-Live — ${escapeHtml(client.name || '')}</h2>
+      <p><b>الدولة:</b> ${escapeHtml(client.country || '-')} | <b>مهندس الميدان:</b> ${escapeHtml(d.engineer_name || '-')} | <b>تاريخ التفعيل:</b> ${escapeHtml(d.activation_date || '-')}</p>
+      <h3>ملاحظات الهاردوير والتركيب</h3><p>${escapeHtml(d.hardware_notes || '-')}</p>
       <h3>Checklist التركيب</h3>
-      <ul>${d.checklist.map(c => `<li>${c.item} — ${c.done ? 'تم' : 'لسه'}</li>`).join('') || '<li>-</li>'}</ul>
-      <h3>ملخص التدريب</h3><p>${d.training_summary || '-'}</p>
+      <ul>${d.checklist.map(c => `<li>${escapeHtml(c.item)} — ${c.done ? 'تم' : 'لسه'}</li>`).join('') || '<li>-</li>'}</ul>
+      <h3>ملخص التدريب</h3><p>${escapeHtml(d.training_summary || '-')}</p>
       <h3>المشاكل والإجراءات</h3>
-      <ul>${d.issues.map(i => `<li>${i.issue} — ${i.action} (${i.owner || '-'})</li>`).join('') || '<li>-</li>'}</ul>
-      <h3>حالة الـ Go-Live: ${d.status}</h3>
-      <p><b>توصية مهندس الميدان:</b> ${d.recommendation || '-'}</p>
+      <ul>${d.issues.map(i => `<li>${escapeHtml(i.issue)} — ${escapeHtml(i.action)} (${escapeHtml(i.owner || '-')})</li>`).join('') || '<li>-</li>'}</ul>
+      <h3>حالة الـ Go-Live: ${escapeHtml(d.status)}</h3>
+      <p><b>توصية مهندس الميدان:</b> ${escapeHtml(d.recommendation || '-')}</p>
       <h3>التوقيع</h3>
-      <p>مهندس الميدان: ${d.sign_eng || '____________'} &nbsp;&nbsp; ممثل العميل: ${d.sign_client || '____________'} &nbsp;&nbsp; التاريخ: ${d.sign_date || '-'}</p>
+      <p>مهندس الميدان: ${escapeHtml(d.sign_eng || '____________')} &nbsp;&nbsp; ممثل العميل: ${escapeHtml(d.sign_client || '____________')} &nbsp;&nbsp; التاريخ: ${escapeHtml(d.sign_date || '-')}</p>
     </div>
   `;
   window.print();

@@ -78,18 +78,38 @@ function render() {
     card.className = 'card';
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        <div class="card-title" style="margin:0;">${c.name || '-'}</div>
-        <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${c.review_status}</span>
+        <div class="card-title" style="margin:0;">${escapeHtml(c.name || '-')}</div>
+        <div style="display:flex; gap:6px;">
+          <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${escapeHtml(c.review_status)}</span>
+          ${c.stage === 'won' && c.implementation_stage ? `<span class="badge-pill ${implementationBadgeClass(c.implementation_stage)}">${escapeHtml(c.implementation_stage)}</span>` : ''}
+        </div>
       </div>
-      <div class="hint" style="margin-bottom:8px;">السيلز: ${salesName} | المرحلة: ${stageLabel(c.stage)} | تليفون العميل: ${c.phone || '-'}</div>
+      <div class="hint" style="margin-bottom:8px;">السيلز: ${escapeHtml(salesName)} | المرحلة: ${stageLabel(c.stage)} | تليفون العميل: ${escapeHtml(c.phone || '-')}</div>
       <div class="summary-box">${buildClientSummary(c)}</div>
+      ${c.stage === 'won' ? `
+      <div class="field" style="margin-top:10px;">
+        <label>مرحلة التنفيذ</label>
+        <select data-impl-select="${c.id}">
+          <option value="">لم تبدأ بعد</option>
+          ${IMPLEMENTATION_STAGES.map(s => `<option value="${s}" ${c.implementation_stage === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
         <button class="btn-secondary" onclick="setReview('${c.id}','تم الاستلام')">تحديد كمستلم</button>
         <button class="btn-secondary" onclick="setReview('${c.id}','يحتاج استكمال')">يحتاج استكمال</button>
         <button class="btn-secondary" onclick="openDebriefModal('${c.id}')">إضافة Debrief</button>
         <a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">تقرير Go-Live</a>
+        ${c.stage === 'won' ? `<button class="btn-primary" data-impl-save="${c.id}">حفظ مرحلة التنفيذ</button>` : ''}
       </div>
     `;
+    if (c.stage === 'won') {
+      const saveBtn = card.querySelector(`[data-impl-save="${c.id}"]`);
+      saveBtn.addEventListener('click', async () => {
+        const select = card.querySelector(`[data-impl-select="${c.id}"]`);
+        await sb.from('clients').update({ implementation_stage: select.value || null }).eq('id', c.id);
+        await loadClients();
+      });
+    }
     el.appendChild(card);
   });
 }

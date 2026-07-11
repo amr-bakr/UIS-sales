@@ -63,10 +63,13 @@ function renderKanban() {
       card.className = 'kanban-card';
       card.onclick = () => openClientModal(c);
       card.innerHTML = `
-        <div class="kanban-card-name">${c.name || '-'}</div>
-        <div class="kanban-card-meta">${c.phone || ''}</div>
+        <div class="kanban-card-name">${escapeHtml(c.name || '-')}</div>
+        <div class="kanban-card-meta">${escapeHtml(c.phone || '')}</div>
         <div class="kanban-card-meta">${c.deal_value ? formatMoney(c.deal_value, c.currency) : ''}</div>
-        <div style="margin-top:6px;"><span class="badge-pill ${reviewBadgeClass(c.review_status)}">${c.review_status}</span></div>
+        <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+          <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${escapeHtml(c.review_status)}</span>
+          ${c.stage === 'won' && c.implementation_stage ? `<span class="badge-pill ${implementationBadgeClass(c.implementation_stage)}">${escapeHtml(c.implementation_stage)}</span>` : ''}
+        </div>
       `;
       col.appendChild(card);
     });
@@ -106,6 +109,9 @@ function discoveryFormHtml(prefix) {
       <div class="field"><label>عدد المخازن</label><input id="${prefix}_warehouseCount" type="number"></div>
       <div class="field"><label>اسم المسؤول ومنصبه</label><input id="${prefix}_contact" type="text"></div>
       <div class="field"><label>تاريخ الزيارة</label><input id="${prefix}_date" type="date"></div>
+      <div class="field"><label>مصدر العميل</label>
+        <select id="${prefix}_leadSource"><option value="">اختر...</option>${LEAD_SOURCES.map(s => `<option>${s}</option>`).join('')}</select>
+      </div>
     </div>
     <div class="card-title" style="margin-top:16px;">النظام الحالي</div>
     <div class="grid2">
@@ -183,6 +189,7 @@ async function submitNewClient() {
     name, phone: v('new_phone'), country: v('new_country'),
     activity: v('new_activity'), branches: v('new_branches'), users_count: v('new_users'),
     warehouse: v('new_warehouse'), warehouse_count: v('new_warehouseCount'), contact: v('new_contact'), visit_date: v('new_date'),
+    lead_source: v('new_leadSource'),
     has_system: v('new_hasSystem'), sys_name: v('new_sysName'), sys_age: v('new_sysAge'), sys_type: v('new_sysType'),
     problems: collectProblemsFromDom('new_problems'), needs: v('new_needs'),
     modules: collectModulesFrom('new'),
@@ -201,10 +208,11 @@ async function submitNewClient() {
 async function openClientModal(c) {
   const root = document.getElementById('modal-root');
   const { data: debriefs } = await sb.from('debriefs').select('*').eq('client_id', c.id).order('created_at', { ascending: false });
+  const { data: activities } = await sb.from('activities').select('*').eq('client_id', c.id).order('activity_date', { ascending: false });
   root.innerHTML = `
   <div class="modal-overlay" style="position:fixed;">
     <div class="modal-box">
-      <div class="modal-head"><div class="card-title" style="margin:0;">${c.name}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-head"><div class="card-title" style="margin:0;">${escapeHtml(c.name)}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
       <div class="field" style="margin-bottom:10px;">
         <label>المرحلة الحالية</label>
         <select id="stage-select">${STAGES.map(s => `<option value="${s.key}" ${s.key === c.stage ? 'selected' : ''}>${s.label}</option>`).join('')}</select>
@@ -221,20 +229,62 @@ async function openClientModal(c) {
         </div>
         <div class="field"><label>تاريخ الإغلاق المتوقع</label><input id="deal-close" type="date" value="${c.expected_close_date || ''}"></div>
         <div class="field"><label>القيمة المرجّحة (حسب المرحلة)</label><input value="${formatMoney(weightedValue(c), c.currency)}" disabled></div>
+        <div class="field"><label>مصدر العميل</label>
+          <select id="deal-leadsource">
+            <option value="">غير محدد</option>
+            ${LEAD_SOURCES.map(s => `<option ${c.lead_source === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <button class="btn-secondary" style="margin-top:8px;" onclick="updateFinancials('${c.id}')">حفظ البيانات المالية</button>
+
+      <div class="card-title" style="margin-top:16px;">العقد والتجديد</div>
+      <div class="grid2">
+        <div class="field"><label>تاريخ بداية العقد</label><input id="contract-start" type="date" value="${c.contract_start_date || ''}"></div>
+        <div class="field"><label>تاريخ التجديد القادم</label><input id="renewal-date" type="date" value="${c.renewal_date || ''}"></div>
+        <div class="field"><label>قيمة التجديد السنوي</label><input id="renewal-value" type="number" min="0" value="${c.renewal_value || ''}"></div>
+      </div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="updateRenewal('${c.id}')">حفظ بيانات العقد</button>
+
+      ${c.stage === 'won' ? `
+      <div class="card-title" style="margin-top:16px;">مرحلة التنفيذ</div>
+      <div class="field">
+        <select id="impl-stage">
+          <option value="">لم تبدأ بعد</option>
+          ${IMPLEMENTATION_STAGES.map(s => `<option value="${s}" ${c.implementation_stage === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="updateImplementationStage('${c.id}')">تحديث مرحلة التنفيذ</button>
+      ` : `<div class="hint" style="margin-top:12px;">مرحلة التنفيذ بتظهر بعد ما الصفقة توصل لمرحلة "فوز".</div>`}
+
       <div class="summary-box" style="margin-top:14px;">${buildClientSummary(c)}</div>
       <div class="card-title" style="margin-top:16px;">Debrief</div>
       <div id="debrief-list">${(debriefs || []).map(db => `
         <div class="hint" style="margin-bottom:8px; padding:8px; background:var(--blue-50); border-radius:8px;">
           ${new Date(db.created_at).toLocaleDateString('ar-EG')}<br>
-          إيجابيات: ${db.went_well || '-'}<br>اعتراضات: ${db.objections || '-'}<br>الخطوة التالية: ${db.next_step || '-'}
+          إيجابيات: ${escapeHtml(db.went_well || '-')}<br>اعتراضات: ${escapeHtml(db.objections || '-')}<br>الخطوة التالية: ${escapeHtml(db.next_step || '-')}
         </div>`).join('') || '<div class="hint">لا يوجد Debrief بعد</div>'}
       </div>
       <div class="field"><label>إيجابيات الديمو</label><input id="db_well" type="text"></div>
       <div class="field"><label>اعتراضات</label><input id="db_obj" type="text"></div>
       <div class="field"><label>الخطوة التالية</label><input id="db_next" type="text"></div>
       <button class="btn-secondary" style="margin-top:8px;" onclick="addDebrief('${c.id}')">إضافة Debrief</button>
+
+      <div class="card-title" style="margin-top:16px;">سجل النشاط (زيارات ومكالمات)</div>
+      <div id="activity-list">${(activities || []).map(a => `
+        <div class="hint" style="margin-bottom:6px; padding:8px; background:var(--blue-50); border-radius:8px;">
+          ${a.activity_date} — ${escapeHtml(a.activity_type)}${a.notes ? (' — ' + escapeHtml(a.notes)) : ''}
+        </div>`).join('') || '<div class="hint">لا يوجد نشاط مسجّل بعد</div>'}
+      </div>
+      <div class="grid2" style="margin-top:8px;">
+        <div class="field"><label>نوع النشاط</label>
+          <select id="act-type"><option>زيارة</option><option>مكالمة</option><option>متابعة</option></select>
+        </div>
+        <div class="field"><label>التاريخ</label><input id="act-date" type="date"></div>
+      </div>
+      <input id="act-notes" type="text" placeholder="ملاحظة سريعة (اختياري)" style="margin-top:8px;">
+      <button class="btn-secondary" style="margin-top:8px;" onclick="logActivity('${c.id}')">تسجيل النشاط</button>
+
       <div style="margin-top:10px;"><a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">عرض تقرير Go-Live</a></div>
     </div>
   </div>`;
@@ -252,8 +302,27 @@ async function updateFinancials(clientId) {
     deal_value: document.getElementById('deal-value').value || 0,
     currency: document.getElementById('deal-currency').value,
     expected_close_date: document.getElementById('deal-close').value,
+    lead_source: document.getElementById('deal-leadsource').value || null,
   };
   await sb.from('clients').update(d).eq('id', clientId);
+  closeModal();
+  await loadClients();
+}
+
+async function updateRenewal(clientId) {
+  const d = {
+    contract_start_date: document.getElementById('contract-start').value,
+    renewal_date: document.getElementById('renewal-date').value,
+    renewal_value: document.getElementById('renewal-value').value || 0,
+  };
+  await sb.from('clients').update(d).eq('id', clientId);
+  closeModal();
+  await loadClients();
+}
+
+async function updateImplementationStage(clientId) {
+  const stage = document.getElementById('impl-stage').value || null;
+  await sb.from('clients').update({ implementation_stage: stage }).eq('id', clientId);
   closeModal();
   await loadClients();
 }
@@ -261,6 +330,19 @@ async function updateFinancials(clientId) {
 async function addDebrief(clientId) {
   const d = { client_id: clientId, created_by: currentProfile.id, went_well: v('db_well'), objections: v('db_obj'), next_step: v('db_next') };
   await sb.from('debriefs').insert(d);
+  const c = allClients.find(x => x.id === clientId);
+  openClientModal(c);
+}
+
+async function logActivity(clientId) {
+  const d = {
+    client_id: clientId,
+    sales_id: currentProfile.id,
+    activity_type: document.getElementById('act-type').value,
+    activity_date: document.getElementById('act-date').value || new Date().toISOString().slice(0, 10),
+    notes: document.getElementById('act-notes').value.trim(),
+  };
+  await sb.from('activities').insert(d);
   const c = allClients.find(x => x.id === clientId);
   openClientModal(c);
 }
