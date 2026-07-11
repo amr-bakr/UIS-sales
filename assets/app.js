@@ -64,6 +64,54 @@ function monthKey(dateStr) {
   return dateStr.slice(0, 7); // "2026-07-15" → "2026-07"
 }
 
+// ---------- تجربة الاستخدام: تنبيهات Toast بدل alert() ----------
+function showToast(message, type = 'info') {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-show'));
+  setTimeout(() => {
+    toast.classList.remove('toast-show');
+    setTimeout(() => toast.remove(), 250);
+  }, 3200);
+}
+
+// ---------- تجربة الاستخدام: قفل أي Modal بزرار Escape أو بالضغط برّه ----------
+(function wireModalDismiss() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    }
+  });
+})();
+
+// ---------- تجربة الاستخدام: تعطيل زرار وقت العملية عشان يمنع ضغط مزدوج ----------
+async function withButtonLoading(button, label, fn) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.innerHTML = label + '<span class="spinner"></span>';
+  try {
+    await fn();
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
 // ---------- Phase 4: تتبّع مرحلة التنفيذ بعد كسب الصفقة ----------
 const IMPLEMENTATION_STAGES = [
   'العقد موقّع',
