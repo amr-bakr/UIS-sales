@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة العملاء — المستخدمون</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="app-shell">
+<div class="sidebar" id="sidebar-root"></div>
+<div class="main-content">
+<div class="wrap" style="position:relative;">
+  <div class="topbar">
+    <div>
+      <div class="brand-title">المستخدمون</div>
+      <div class="brand-sub">إدارة حسابات الفريق وأدوارهم</div>
+    </div>
+    <div class="nav-links">
+      <button class="btn-primary" onclick="openNewUserModal()">+ إضافة مستخدم</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <table class="data-table" id="usersTable">
+      <thead><tr><th>الاسم</th><th>الإيميل</th><th>الدور</th></tr></thead>
+      <tbody><tr><td colspan="3" class="hint"><span class="spinner"></span> جارِ التحميل...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">سجل التدقيق (آخر التغييرات)</div>
+    <table class="data-table" id="auditTable">
+      <thead><tr><th>الوقت</th><th>مين عمل التغيير</th><th>العملية</th><th>التفاصيل</th></tr></thead>
+      <tbody><tr><td colspan="4" class="hint">جارِ التحميل...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+</div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="assets/app.js"></script>
+<script>
+let currentProfile = null;
+let allProfiles = [];
+
+(async function init() {
+  currentProfile = await requireRole(['admin']);
+  if (!currentProfile) return;
+  renderSidebar('users', currentProfile);
+  await loadUsers();
+  await loadAudit();
+})();
+
+async function loadUsers() {
+  const { data, error } = await sb.from('profiles').select('*').order('email');
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+  allProfiles = data || [];
+  renderUsers();
+}
+
+function renderUsers() {
+  const tbody = document.querySelector('#usersTable tbody');
+  tbody.innerHTML = allProfiles.map(p => `
+    <tr>
+      <td>${escapeHtml(p.full_name || '-')}</td>
+      <td>${escapeHtml(p.email || '-')}</td>
+      <td>
+        <select data-role-select="${p.id}" ${p.id === currentProfile.id ? 'disabled' : ''}>
+          <option value="sales" ${p.role === 'sales' ? 'selected' : ''}>سيلز</option>
+          <option value="support" ${p.role === 'support' ? 'selected' : ''}>تيكنيكال سبورت</option>
+          <option value="admin" ${p.role === 'admin' ? 'selected' : ''}>إدارة</option>
+        </select>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="3" class="hint">لا يوجد مستخدمون</td></tr>';
+
+  tbody.querySelectorAll('select[data-role-select]').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const id = sel.getAttribute('data-role-select');
+      const { error } = await sb.from('profiles').update({ role: sel.value }).eq('id', id);
+      if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+      showToast('تم تحديث الدور', 'success');
+      await loadUsers();
+      await loadAudit();
+    });
+  });
+}
+
+async function loadAudit() {
+  const { data, error } = await sb.from('audit_log').select('*').order('created_at', { ascending: false }).limit(30);
+  const tbody = document.querySelector('#auditTable tbody');
+  if (error) { tbody.innerHTML = '<tr><td colspan="4" class="hint">تعذر تحميل سجل التدقيق</td></tr>'; return; }
+  const profilesById = {};
+  allProfiles.forEach(p => profilesById[p.id] = p);
+  tbody.innerHTML = (data || []).map(a => `
+    <tr>
+      <td>${new Date(a.created_at).toLocaleString('ar-EG')}</td>
+      <td>${escapeHtml((profilesById[a.actor_id] && profilesById[a.actor_id].full_name) || '-')}</td>
+      <td>${escapeHtml(actionLabel(a.action))}</td>
+      <td>${escapeHtml(formatAuditDetails(a.details))}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="hint">لا يوجد نشاط مسجّل بعد</td></tr>';
+}
+
+function actionLabel(action) {
+  if (action === 'stage_change') return 'تغيير مرحلة عميل';
+  if (action === 'review_status_change') return 'تغيير حالة مراجعة';
+  if (action === 'role_change') return 'تغيير دور مستخدم';
+  return action;
+}
+
+function formatAuditDetails(d) {
+  if (!d) return '-';
+  if (d.client_name) return `${d.client_name}: ${d.from || '-'} ← ${d.to || '-'}`;
+  if (d.user_name) return `${d.user_name}: ${d.from || '-'} ← ${d.to || '-'}`;
+  return JSON.stringify(d);
+}
+
+function openNewUserModal() {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-head"><div class="card-title" style="margin:0;">مستخدم جديد</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="field" style="margin-bottom:10px;"><label>الاسم الكامل</label><input id="nu-name" type="text"></div>
+      <div class="field" style="margin-bottom:10px;"><label>الإيميل</label><input id="nu-email" type="email"></div>
+      <div class="field" style="margin-bottom:10px;"><label>كلمة المرور المبدئية</label><input id="nu-password" type="text" placeholder="6 حروف على الأقل"></div>
+      <div class="field" style="margin-bottom:12px;"><label>الدور</label>
+        <select id="nu-role"><option value="sales">سيلز</option><option value="support">تيكنيكال سبورت</option><option value="admin">إدارة</option></select>
+      </div>
+      <div id="nu-error" class="error-box" style="display:none;"></div>
+      <button class="btn-primary" id="nu-save-btn" style="width:100%;" onclick="submitNewUser()">إنشاء الحساب</button>
+    </div>
+  </div>`;
+}
+
+async function submitNewUser() {
+  const errEl = document.getElementById('nu-error');
+  const btn = document.getElementById('nu-save-btn');
+  errEl.style.display = 'none';
+  const full_name = document.getElementById('nu-name').value.trim();
+  const email = document.getElementById('nu-email').value.trim();
+  const password = document.getElementById('nu-password').value;
+  const role = document.getElementById('nu-role').value;
+
+  if (!full_name || !email || !password) {
+    errEl.textContent = 'كل الحقول مطلوبة.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = 'كلمة المرور لازم تكون 6 حروف/أرقام على الأقل.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = 'جارِ الإنشاء<span class="spinner"></span>';
+
+  try {
+    // عميل مؤقت ومنفصل تمامًا عن جلستك الحالية (persistSession: false)
+    // عشان إنشاء الحساب الجديد ميأثرش على تسجيل دخولك أنت كأدمن
+    const tempClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data, error } = await tempClient.auth.signUp({ email, password });
+    if (error) {
+      errEl.textContent = error.message.includes('already registered')
+        ? 'الإيميل ده مسجّل بالفعل.'
+        : 'خطأ: ' + error.message;
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!data.user) {
+      errEl.textContent = 'تعذر إنشاء الحساب.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // البروفايل اتعمل تلقائي بدور "sales" افتراضي — نعدّله بالاسم والدور الصح
+    const { error: profileErr } = await sb.from('profiles')
+      .update({ full_name, role, email })
+      .eq('id', data.user.id);
+
+    if (profileErr) {
+      errEl.textContent = 'الحساب اتعمل لكن حصل خطأ في حفظ الدور: ' + profileErr.message;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    showToast('تم إنشاء الحساب بنجاح', 'success');
+    closeModal();
+    await loadUsers();
+  } catch (e) {
+    errEl.textContent = 'حصل خطأ غير متوقع: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'إنشاء الحساب';
+  }
+}
+
+function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+</script>
+</body>
+</html>

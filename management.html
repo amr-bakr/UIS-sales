@@ -12,14 +12,14 @@
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
+<div class="app-shell">
+<div class="sidebar" id="sidebar-root"></div>
+<div class="main-content">
 <div class="wrap">
   <div class="topbar">
-    <div class="brand">
-      <div class="brand-mark">UIS</div>
-      <div>
-        <div class="brand-title">لوحة الإدارة</div>
-        <div class="brand-sub" id="who">...</div>
-      </div>
+    <div>
+      <div class="brand-title">لوحة الإدارة</div>
+      <div class="brand-sub" id="who">...</div>
     </div>
     <div class="nav-links">
       <input id="date-from" type="date" style="width:auto;" onchange="render()">
@@ -32,7 +32,6 @@
         <option value="عُمان">عُمان</option>
       </select>
       <button class="btn-secondary" onclick="exportPdf()">تصدير PDF</button>
-      <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>
 
@@ -91,6 +90,8 @@
     <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th><th>قيمة مرجّحة (USD)</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
+</div>
+</div>
 
 <div id="print-view" style="display:none;"></div>
 <style>
@@ -114,6 +115,7 @@ let targetChartInstance = null;
 (async function init() {
   currentProfile = await requireRole(['admin']);
   if (!currentProfile) return;
+  renderSidebar('dashboard', currentProfile);
   document.getElementById('who').textContent = (currentProfile.full_name || 'الإدارة');
 
   const { data: profiles } = await sb.from('profiles').select('*');

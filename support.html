@@ -11,19 +11,18 @@
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
+<div class="app-shell">
+<div class="sidebar" id="sidebar-root"></div>
+<div class="main-content">
 <div class="wrap" style="position:relative;">
   <div class="topbar">
-    <div class="brand">
-      <div class="brand-mark">UIS</div>
-      <div>
-        <div class="brand-title">مراجعة التيكنيكال سبورت</div>
-        <div class="brand-sub" id="who">...</div>
-      </div>
+    <div>
+      <div class="brand-title">مراجعة النماذج</div>
+      <div class="brand-sub" id="who">...</div>
     </div>
     <div class="nav-links">
       <button class="nav-link" id="filter-pending" onclick="setFilter('pending')">بانتظار المراجعة</button>
       <button class="nav-link" id="filter-all" onclick="setFilter('all')">الكل</button>
-      <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>
 
@@ -31,6 +30,8 @@
 </div>
 
 <div id="modal-root"></div>
+</div>
+</div>
 
 <script src="assets/app.js"></script>
 <script>
@@ -42,6 +43,7 @@ let currentFilter = 'pending';
 (async function init() {
   currentProfile = await requireRole(['support', 'admin']);
   if (!currentProfile) return;
+  renderSidebar('review', currentProfile);
   document.getElementById('who').textContent = (currentProfile.full_name || 'تيكنيكال سبورت');
   await loadProfiles();
   await loadClients();
