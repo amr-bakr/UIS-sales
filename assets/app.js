@@ -131,6 +131,73 @@ function implementationBadgeClass(stage) {
 // ---------- Phase 6: مصادر العملاء ----------
 const LEAD_SOURCES = ['إحالة عميل', 'معرض / فعالية', 'اتصال بارد', 'موقع الشركة', 'سوشيال ميديا', 'أخرى'];
 
+// ---------- الشريط الجانبي الموحد ----------
+function renderSidebar(activeKey, profile) {
+  const root = document.getElementById('sidebar-root');
+  if (!root) return;
+  const links = [];
+  if (profile.role === 'admin') {
+    links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة' });
+    links.push({ key: 'users', href: 'users.html', label: 'المستخدمون' });
+  }
+  if (profile.role === 'sales') {
+    links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي' });
+  }
+  if (profile.role === 'support') {
+    links.push({ key: 'review', href: 'support.html', label: 'مراجعة النماذج' });
+  }
+  root.innerHTML = `
+    <div class="sidebar-brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title" style="font-size:14px;">نظام إدارة العملاء</div>
+        <div class="sidebar-user">${escapeHtml(profile.full_name || profile.email || '')}</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      ${links.map(l => `<a class="sidebar-link${l.key === activeKey ? ' active' : ''}" href="${l.href}">${l.label}</a>`).join('')}
+    </nav>
+    <div class="sidebar-foot">
+      <button class="btn-logout" style="width:100%;" onclick="logout()">خروج</button>
+    </div>
+  `;
+}
+
+// ---------- رابط واتساب سريع ----------
+function whatsappLink(phone) {
+  if (!phone) return null;
+  const digits = phone.replace(/[^\d]/g, '');
+  if (!digits) return null;
+  return 'https://wa.me/' + digits;
+}
+
+// ---------- أسباب الخسارة ----------
+const LOSS_REASONS = ['السعر', 'المنافس', 'التوقيت', 'أخرى'];
+
+// ---------- مرفقات العميل (Supabase Storage) ----------
+async function uploadClientFile(clientId, file) {
+  const path = clientId + '/' + Date.now() + '_' + file.name.replace(/[^\w.\-]/g, '_');
+  const { error } = await sb.storage.from('client-files').upload(path, file);
+  if (error) throw error;
+  return path;
+}
+
+async function listClientFiles(clientId) {
+  const { data, error } = await sb.storage.from('client-files').list(clientId, { sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) return [];
+  return data || [];
+}
+
+async function getClientFileUrl(clientId, filename) {
+  const { data, error } = await sb.storage.from('client-files').createSignedUrl(clientId + '/' + filename, 3600);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+async function deleteClientFile(clientId, filename) {
+  await sb.storage.from('client-files').remove([clientId + '/' + filename]);
+}
+
 function reviewBadgeClass(status) {
   if (status === 'تم الاستلام') return 'badge-received';
   if (status === 'يحتاج استكمال') return 'badge-needs';

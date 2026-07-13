@@ -106,6 +106,26 @@ table.data-table tbody tr:hover { background:var(--blue-50); }
 /* Loading spinner */
 .spinner { display:inline-block; width:16px; height:16px; border:2px solid var(--blue-100); border-top-color:var(--blue-600); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:8px; }
 
+/* Sidebar shell layout */
+.app-shell { display:flex; min-height:100vh; align-items:stretch; }
+.sidebar { flex:0 0 220px; width:220px; background:#fff; border-left:1px solid var(--line); padding:20px 14px; position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; display:flex; flex-direction:column; }
+.sidebar-brand { display:flex; align-items:center; gap:10px; margin-bottom:22px; padding:0 4px; }
+.sidebar-user { font-size:12px; color:var(--ink-soft); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sidebar-nav { display:flex; flex-direction:column; gap:3px; }
+.sidebar-link { display:block; padding:10px 12px; border-radius:8px; text-decoration:none; color:var(--ink-soft); font-size:13.5px; font-weight:500; transition:background .15s var(--ease), color .15s var(--ease); }
+.sidebar-link:hover { background:var(--blue-50); color:var(--blue-700); }
+.sidebar-link.active { background:var(--blue-700); color:#fff; }
+.sidebar-foot { margin-top:auto; padding-top:14px; border-top:1px solid var(--line); }
+.main-content { flex:1; min-width:0; }
+.main-content .wrap { max-width:1080px; }
+@media (max-width:780px) {
+  .app-shell { flex-direction:column; }
+  .sidebar { position:relative; width:100%; height:auto; border-left:none; border-bottom:1px solid var(--line); flex-direction:row; align-items:center; flex-wrap:wrap; gap:10px; }
+  .sidebar-brand { margin-bottom:0; }
+  .sidebar-nav { flex-direction:row; flex-wrap:wrap; }
+  .sidebar-foot { margin-top:0; padding-top:0; border-top:none; margin-right:auto; }
+}
+
 /* Toasts */
 #toast-container { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:100; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
 .toast {
