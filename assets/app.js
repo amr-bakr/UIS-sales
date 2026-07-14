@@ -29,8 +29,8 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // ---------- تحميل مكتبة Supabase ديناميكيًا مع أكتر من مصدر بديل ----------
 // (بدون document.write عشان الكروم مش يتجاهله على النت البطيء)
 const SUPABASE_LIB_SOURCES = [
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
   'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
 ];
 
 function loadScriptTag(src) {
