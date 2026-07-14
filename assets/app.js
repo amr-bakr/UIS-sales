@@ -23,7 +23,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v13';
+const APP_BUILD_VERSION = 'v14';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -53,6 +53,22 @@ function loadSupabaseLib() {
     Promise.reject()
   );
   return _libLoadPromise;
+}
+
+// ---------- تحميل مكتبة Chart.js ديناميكيًا (مستخدمة في لوحة الإدارة بس) ----------
+let _chartLibPromise = null;
+function loadChartLib() {
+  if (typeof Chart !== 'undefined') return Promise.resolve();
+  if (_chartLibPromise) return _chartLibPromise;
+  const sources = [
+    'https://unpkg.com/chart.js@4.4.4/dist/chart.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js',
+  ];
+  _chartLibPromise = sources.reduce(
+    (chain, src) => chain.catch(() => loadScriptTag(src)),
+    Promise.reject()
+  );
+  return _chartLibPromise;
 }
 
 let sb = null;
