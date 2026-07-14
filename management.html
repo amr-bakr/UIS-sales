@@ -6,10 +6,13 @@
 <title>نظام إدارة العملاء — لوحة الإدارة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://lndacyhcjrpybbsjwupw.supabase.co">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-<link rel="stylesheet" href="assets/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" defer></script>
+<link rel="stylesheet" href="assets/styles.css?v=11">
 </head>
 <body>
 <div class="app-shell">
@@ -32,62 +35,73 @@
         <option value="عُمان">عُمان</option>
       </select>
       <button class="btn-secondary" onclick="exportPdf()">تصدير PDF</button>
+      <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>
 
-  <div class="stat-grid" id="stats"><div class="empty-state"><span class="spinner"></span> جارِ تحميل الأرقام...</div></div>
-  <div class="stat-grid" id="finance-stats"></div>
-
-  <div class="card">
-    <div class="card-title">توزيع العملاء حسب المرحلة</div>
-    <canvas id="stageChart" height="90"></canvas>
+  <div class="dash-tabs">
+    <button class="nav-link active" id="dtab-overview" onclick="switchDashTab('overview')">نظرة عامة</button>
+    <button class="nav-link" id="dtab-finance" onclick="switchDashTab('finance')">الماليات والتوقعات</button>
+    <button class="nav-link" id="dtab-team" onclick="switchDashTab('team')">الفريق والمصادر</button>
+    <button class="nav-link" id="dtab-implementation" onclick="switchDashTab('implementation')">التنفيذ والتجديدات</button>
   </div>
 
-  <div class="card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <div class="card-title" style="margin:0;">التارجت مقابل الفعلي</div>
-      <input id="target-month" type="month" onchange="render()" style="width:auto;">
+  <div id="tab-overview" class="dash-tab-content">
+    <div class="stat-grid" id="stats"><div class="empty-state"><span class="spinner"></span> جارِ تحميل الأرقام...</div></div>
+    <div class="card">
+      <div class="card-title">توزيع العملاء حسب المرحلة</div>
+      <canvas id="stageChart" height="90"></canvas>
     </div>
-    <canvas id="targetChart" height="90"></canvas>
   </div>
 
-  <div class="card">
-    <div class="card-title">تحديد التارجت الشهري لكل سيلز</div>
-    <div class="grid2">
-      <div class="field"><label>السيلز</label><select id="target-sales-select"></select></div>
-      <div class="field"><label>الشهر</label><input id="target-input-month" type="month"></div>
-      <div class="field"><label>قيمة التارجت</label><input id="target-amount" type="number" min="0"></div>
-      <div class="field"><label>العملة</label>
-        <select id="target-currency"><option value="EGP">جنيه مصري</option><option value="KWD">دينار كويتي</option><option value="OMR">ريال عُماني</option></select>
+  <div id="tab-finance" class="dash-tab-content" style="display:none;">
+    <div class="stat-grid" id="finance-stats"></div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">التارجت مقابل الفعلي</div>
+        <input id="target-month" type="month" onchange="render()" style="width:auto;">
       </div>
+      <canvas id="targetChart" height="90"></canvas>
     </div>
-    <button class="btn-primary" style="margin-top:10px;" onclick="saveTarget()">حفظ التارجت</button>
-    <div id="target-save-msg" class="hint" style="margin-top:8px;"></div>
+    <div class="card">
+      <div class="card-title">تحديد التارجت الشهري لكل سيلز</div>
+      <div class="grid2">
+        <div class="field"><label>السيلز</label><select id="target-sales-select"></select></div>
+        <div class="field"><label>الشهر</label><input id="target-input-month" type="month"></div>
+        <div class="field"><label>قيمة التارجت</label><input id="target-amount" type="number" min="0"></div>
+        <div class="field"><label>العملة</label>
+          <select id="target-currency"><option value="EGP">جنيه مصري</option><option value="KWD">دينار كويتي</option><option value="OMR">ريال عُماني</option></select>
+        </div>
+      </div>
+      <button class="btn-primary" style="margin-top:10px;" onclick="saveTarget()">حفظ التارجت</button>
+      <div id="target-save-msg" class="hint" style="margin-top:8px;"></div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">أداء مصادر العملاء</div>
-    <table class="data-table" id="leadSourceTable"><thead><tr><th>المصدر</th><th>عدد العملاء</th><th>فوز</th><th>نسبة الفوز</th></tr></thead><tbody></tbody></table>
+  <div id="tab-team" class="dash-tab-content" style="display:none;">
+    <div class="card">
+      <div class="card-title">أداء مصادر العملاء</div>
+      <table class="data-table" id="leadSourceTable"><thead><tr><th>المصدر</th><th>عدد العملاء</th><th>فوز</th><th>نسبة الفوز</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">نشاط الفريق (حسب الفترة المحددة)</div>
+      <table class="data-table" id="activityTable"><thead><tr><th>السيلز</th><th>زيارات</th><th>مكالمات</th><th>متابعات</th><th>الإجمالي</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">أداء كل سيلز</div>
+      <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th><th>قيمة مرجّحة (USD)</th></tr></thead><tbody></tbody></table>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">نشاط الفريق (حسب الفترة المحددة)</div>
-    <table class="data-table" id="activityTable"><thead><tr><th>السيلز</th><th>زيارات</th><th>مكالمات</th><th>متابعات</th><th>الإجمالي</th></tr></thead><tbody></tbody></table>
-  </div>
-
-  <div class="card">
-    <div class="card-title">مراحل التنفيذ الحالية (للصفقات المكسوبة)</div>
-    <table class="data-table" id="implTable"><thead><tr><th>المرحلة</th><th>عدد العملاء</th></tr></thead><tbody></tbody></table>
-  </div>
-
-  <div class="card">
-    <div class="card-title">عقود قريبة من التجديد (خلال 60 يوم)</div>
-    <table class="data-table" id="renewalTable"><thead><tr><th>العميل</th><th>تاريخ التجديد</th><th>الأيام المتبقية</th><th>قيمة التجديد</th></tr></thead><tbody></tbody></table>
-  </div>
-
-  <div class="card">
-    <div class="card-title">أداء كل سيلز</div>
-    <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th><th>قيمة مرجّحة (USD)</th></tr></thead><tbody></tbody></table>
+  <div id="tab-implementation" class="dash-tab-content" style="display:none;">
+    <div class="card">
+      <div class="card-title">مراحل التنفيذ الحالية (للصفقات المكسوبة)</div>
+      <table class="data-table" id="implTable"><thead><tr><th>المرحلة</th><th>عدد العملاء</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">عقود قريبة من التجديد (خلال 60 يوم)</div>
+      <table class="data-table" id="renewalTable"><thead><tr><th>العميل</th><th>تاريخ التجديد</th><th>الأيام المتبقية</th><th>قيمة التجديد</th></tr></thead><tbody></tbody></table>
+    </div>
   </div>
 </div>
 </div>
@@ -95,6 +109,7 @@
 
 <div id="print-view" style="display:none;"></div>
 <style>
+  .dash-tabs { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:10px; }
   @media print {
     body * { visibility:hidden; }
     #print-view, #print-view * { visibility:visible; }
@@ -102,8 +117,8 @@
   }
 </style>
 
-<script src="assets/app.js"></script>
-<script>
+<script src="assets/app.js?v=11" defer></script>
+<script defer>
 let currentProfile = null;
 let allClients = [];
 let profilesById = {};
@@ -142,6 +157,16 @@ let targetChartInstance = null;
 
   render();
 })();
+
+function switchDashTab(key) {
+  ['overview', 'finance', 'team', 'implementation'].forEach(k => {
+    document.getElementById('tab-' + k).style.display = k === key ? 'block' : 'none';
+    document.getElementById('dtab-' + k).classList.toggle('active', k === key);
+  });
+  // الرسوم البيانية جوه تابات مخفية بتحتاج resize لما تظهر تاني
+  if (key === 'overview' && chartInstance) chartInstance.resize();
+  if (key === 'finance' && targetChartInstance) targetChartInstance.resize();
+}
 
 function filteredClients() {
   const country = document.getElementById('country-filter').value;
