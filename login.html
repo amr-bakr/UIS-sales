@@ -28,6 +28,7 @@
     <button onclick="doLogin()" class="btn-primary" style="width:100%;">دخول</button>
   </div>
   <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" style="margin-top:12px;">🌙 الوضع الليلي</button>
+  <div style="text-align:center; font-size:10px; color:var(--ink-muted); margin-top:8px;">نسخة الكود: <span id="build-version"></span></div>
 </div>
 
 <script src="assets/app.js?v=13" defer></script>
@@ -35,6 +36,8 @@
 (async function () {
   const btn = document.getElementById('theme-toggle-btn');
   if (btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️ الوضع النهاري' : '🌙 الوضع الليلي';
+  const vEl = document.getElementById('build-version');
+  if (vEl) vEl.textContent = typeof APP_BUILD_VERSION !== 'undefined' ? APP_BUILD_VERSION : '?';
   const profile = await getCurrentProfile();
   if (profile) redirectByRole(profile.role);
 })();
