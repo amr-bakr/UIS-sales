@@ -241,6 +241,7 @@ function renderSidebar(activeKey, profile) {
     </nav>
     <div class="sidebar-foot">
       <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️ الوضع النهاري' : '🌙 الوضع الليلي'}</button>
+      <div style="text-align:center; font-size:10px; color:var(--ink-muted); margin-top:6px;">نسخة الكود: ${APP_BUILD_VERSION}</div>
     </div>
   `;
 }
