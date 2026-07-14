@@ -26,7 +26,20 @@ function toggleTheme() {
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let sb = null;
+try {
+  if (typeof supabase === 'undefined') {
+    throw new Error('مكتبة الاتصال بالسيرفر (Supabase) متحمّلتش. تأكد من اتصال الإنترنت أو جرب شبكة/متصفح تاني.');
+  }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const banner = document.createElement('div');
+    banner.textContent = 'تعذر الاتصال بالسيرفر: ' + e.message;
+    banner.style.cssText = 'background:#96281B;color:#fff;padding:12px;text-align:center;font-family:Tajawal,sans-serif;font-size:14px;';
+    document.body.insertBefore(banner, document.body.firstChild);
+  });
+}
 
 const STAGES = [
   { key: 'discovery', label: 'الاكتشاف' },
@@ -227,6 +240,7 @@ function reviewBadgeClass(status) {
 
 // ---------- Auth helpers ----------
 async function getCurrentProfile() {
+  if (!sb) return null;
   try {
     const { data: sessionData } = await sb.auth.getSession();
     if (!sessionData || !sessionData.session) return null;
@@ -254,7 +268,7 @@ async function requireRole(allowedRoles) {
 }
 
 async function logout() {
-  await sb.auth.signOut();
+  if (sb) await sb.auth.signOut();
   window.location.href = 'login.html';
 }
 
