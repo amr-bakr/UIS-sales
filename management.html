@@ -12,8 +12,7 @@
 <link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" defer></script>
-<link rel="stylesheet" href="assets/styles.css?v=13">
+<link rel="stylesheet" href="assets/styles.css?v=14">
 </head>
 <body>
 <div class="app-shell">
@@ -118,7 +117,7 @@
   }
 </style>
 
-<script src="assets/app.js?v=13" defer></script>
+<script src="assets/app.js?v=14" defer></script>
 <script defer>
 let currentProfile = null;
 let allClients = [];
@@ -133,6 +132,8 @@ let targetChartInstance = null;
   if (!currentProfile) return;
   renderSidebar('dashboard', currentProfile);
   document.getElementById('who').textContent = (currentProfile.full_name || 'الإدارة');
+
+  try { await loadChartLib(); } catch (e) { console.error('تعذر تحميل مكتبة الرسوم البيانية:', e); }
 
   const { data: profiles } = await sb.from('profiles').select('*');
   (profiles || []).forEach(p => profilesById[p.id] = p);
@@ -225,14 +226,18 @@ function render() {
   `;
 
   const stageCounts = STAGES.map(s => items.filter(c => c.stage === s.key).length);
-  if (chartInstance) chartInstance.destroy();
-  chartInstance = new Chart(document.getElementById('stageChart'), {
-    type: 'bar',
-    data: { labels: STAGES.map(s => s.label), datasets: [{ data: stageCounts, backgroundColor: '#1D63B3', borderRadius: 6 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
-  });
+  try {
+    if (typeof Chart !== 'undefined') {
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(document.getElementById('stageChart'), {
+        type: 'bar',
+        data: { labels: STAGES.map(s => s.label), datasets: [{ data: stageCounts, backgroundColor: '#1D63B3', borderRadius: 6 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+    }
+  } catch (e) { console.error('stage chart failed:', e); }
 
-  renderTargetChart(items, targetMonth);
+  try { renderTargetChart(items, targetMonth); } catch (e) { console.error('target chart failed:', e); }
 
   const renewalTbody = document.querySelector('#renewalTable tbody');
   renewalTbody.innerHTML = upcomingRenewals.map(c => `
@@ -317,6 +322,7 @@ function renderTargetChart(items, targetMonth) {
     return t ? toUSD(t.target_amount, t.currency) : 0;
   });
 
+  if (typeof Chart === 'undefined') return;
   if (targetChartInstance) targetChartInstance.destroy();
   targetChartInstance = new Chart(document.getElementById('targetChart'), {
     type: 'bar',
