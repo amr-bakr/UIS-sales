@@ -32,7 +32,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v14';
+const APP_BUILD_VERSION = 'v15';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
