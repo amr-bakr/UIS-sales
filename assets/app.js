@@ -1,8 +1,17 @@
 // ============================================================
 // الوضع الليلي (Dark Mode) — بيتطبق فورًا في كل صفحة قبل أي حاجة تانية
+// ملحوظة: بعض المتصفحات (زي Edge مع Tracking Prevention) بتمنع الوصول
+// لـ localStorage تمامًا، فلازم نتعامل مع ده بحذر عشان ميوقفش باقي الكود
 // ============================================================
+function safeStorageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function safeStorageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* تجاهل بهدوء */ }
+}
+
 (function applySavedTheme() {
-  const saved = localStorage.getItem('uis-theme');
+  const saved = safeStorageGet('uis-theme');
   if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
 })();
 
@@ -10,10 +19,10 @@ function toggleTheme() {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (isDark) {
     document.documentElement.removeAttribute('data-theme');
-    localStorage.setItem('uis-theme', 'light');
+    safeStorageSet('uis-theme', 'light');
   } else {
     document.documentElement.setAttribute('data-theme', 'dark');
-    localStorage.setItem('uis-theme', 'dark');
+    safeStorageSet('uis-theme', 'dark');
   }
   const btn = document.getElementById('theme-toggle-btn');
   if (btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️ الوضع النهاري' : '🌙 الوضع الليلي';
