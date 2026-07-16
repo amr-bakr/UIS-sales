@@ -25,14 +25,14 @@ function toggleTheme() {
     safeStorageSet('uis-theme', 'dark');
   }
   const btn = document.getElementById('theme-toggle-btn');
-  if (btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️ الوضع النهاري' : '🌙 الوضع الليلي';
+  if (btn) btn.innerHTML = document.documentElement.getAttribute('data-theme') === 'dark' ? ICONS.sun + ' الوضع النهاري' : ICONS.moon + ' الوضع الليلي';
 }
 
 // ============================================================
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v15';
+const APP_BUILD_VERSION = 'v17-design';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -128,6 +128,12 @@ function stageLabel(key) {
   const s = STAGES.find(s => s.key === key);
   return s ? s.label : key;
 }
+
+// ألوان مميزة لكل مرحلة، تستخدم كخط علوي في أعمدة الـ Kanban
+const STAGE_COLORS = {
+  discovery: '#8CA0B4', demo_scheduled: '#2C7BD1', demo_done: '#1D63B3',
+  proposal: '#B8860B', negotiation: '#8B5CF6', won: '#1E7A4C', lost: '#96281B',
+};
 
 // ---------- الأمان: تنظيف أي نص المستخدم كتبه قبل حقنه في الصفحة ----------
 function escapeHtml(str) {
@@ -238,20 +244,31 @@ function implementationBadgeClass(stage) {
 // ---------- Phase 6: مصادر العملاء ----------
 const LEAD_SOURCES = ['إحالة عميل', 'معرض / فعالية', 'اتصال بارد', 'موقع الشركة', 'سوشيال ميديا', 'أخرى'];
 
+// ---------- أيقونات بسيطة (SVG) ----------
+const ICONS = {
+  dashboard: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.2"/><rect x="11" y="2.5" width="6.5" height="4" rx="1.2"/><rect x="11" y="8.5" width="6.5" height="9" rx="1.2"/><rect x="2.5" y="11" width="6.5" height="6.5" rx="1.2"/></svg>',
+  users: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="6.5" r="3"/><path d="M2 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="14.5" cy="7" r="2.3"/><path d="M13 12.2c2.6.3 4.5 2.1 4.5 4.8" stroke-linecap="round"/></svg>',
+  pipeline: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.3" y="3" width="4.6" height="14" rx="1"/><rect x="8" y="3" width="4.6" height="9" rx="1"/><rect x="13.7" y="3" width="4.6" height="11" rx="1"/></svg>',
+  review: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3.5" width="12" height="14" rx="1.4"/><rect x="7" y="1.8" width="6" height="3" rx="1"/><path d="M6.7 10.3l1.8 1.8 3.3-3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  logout: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg>',
+  moon: '<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M16.5 12.8A7 7 0 0 1 7.2 3.5a7.5 7.5 0 1 0 9.3 9.3z"/></svg>',
+  sun: '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none"/><path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M4.5 15.5l1.4-1.4M14.1 5.9l1.4-1.4"/></svg>',
+};
+
 // ---------- الشريط الجانبي الموحد ----------
 function renderSidebar(activeKey, profile) {
   const root = document.getElementById('sidebar-root');
   if (!root) return;
   const links = [];
   if (profile.role === 'admin') {
-    links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة' });
-    links.push({ key: 'users', href: 'users.html', label: 'المستخدمون' });
+    links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة', icon: ICONS.dashboard });
+    links.push({ key: 'users', href: 'users.html', label: 'المستخدمون', icon: ICONS.users });
   }
   if (profile.role === 'sales') {
-    links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي' });
+    links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي', icon: ICONS.pipeline });
   }
   if (profile.role === 'support') {
-    links.push({ key: 'review', href: 'support.html', label: 'مراجعة النماذج' });
+    links.push({ key: 'review', href: 'support.html', label: 'مراجعة النماذج', icon: ICONS.review });
   }
   root.innerHTML = `
     <div class="sidebar-brand">
@@ -262,14 +279,16 @@ function renderSidebar(activeKey, profile) {
       </div>
     </div>
     <nav class="sidebar-nav">
-      ${links.map(l => `<a class="sidebar-link${l.key === activeKey ? ' active' : ''}" href="${l.href}">${l.label}</a>`).join('')}
+      ${links.map(l => `<a class="sidebar-link${l.key === activeKey ? ' active' : ''}" href="${l.href}"><span class="sidebar-icon">${l.icon}</span>${l.label}</a>`).join('')}
     </nav>
     <div class="sidebar-foot">
-      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️ الوضع النهاري' : '🌙 الوضع الليلي'}</button>
+      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme') === 'dark' ? ICONS.sun + ' الوضع النهاري' : ICONS.moon + ' الوضع الليلي'}</button>
       <div style="text-align:center; font-size:10px; color:var(--ink-muted); margin-top:6px;">نسخة الكود: ${APP_BUILD_VERSION}</div>
     </div>
   `;
 }
+
+function logoutIcon() { return ICONS.logout; }
 
 // ---------- رابط واتساب سريع ----------
 function whatsappLink(phone) {
