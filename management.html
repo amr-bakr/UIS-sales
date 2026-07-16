@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة العملاء — لوحة الإدارة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://lndacyhcjrpybbsjwupw.supabase.co">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="icon" href="data:,">
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="assets/styles.css?v=17">
+</head>
+<body>
+<div class="app-shell">
+<div class="sidebar" id="sidebar-root"></div>
+<div class="main-content">
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="brand-title">لوحة الإدارة</div>
+      <div class="brand-sub" id="who">...</div>
+    </div>
+    <div class="nav-links">
+      <input id="date-from" type="date" style="width:auto;" onchange="render()">
+      <span class="hint">إلى</span>
+      <input id="date-to" type="date" style="width:auto;" onchange="render()">
+      <select id="country-filter" onchange="render()" style="width:auto;">
+        <option value="">كل الدول</option>
+        <option value="مصر">مصر</option>
+        <option value="الكويت">الكويت</option>
+        <option value="عُمان">عُمان</option>
+      </select>
+      <button class="btn-secondary" onclick="exportPdf()">تصدير PDF</button>
+      <button class="btn-logout" onclick="logout()"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg> خروج</button>
+    </div>
+  </div>
+
+  <div class="dash-tabs">
+    <button class="nav-link active" id="dtab-overview" onclick="switchDashTab('overview')">نظرة عامة</button>
+    <button class="nav-link" id="dtab-finance" onclick="switchDashTab('finance')">الماليات والتوقعات</button>
+    <button class="nav-link" id="dtab-team" onclick="switchDashTab('team')">الفريق والمصادر</button>
+    <button class="nav-link" id="dtab-implementation" onclick="switchDashTab('implementation')">التنفيذ والتجديدات</button>
+  </div>
+
+  <div id="tab-overview" class="dash-tab-content">
+    <div class="stat-grid" id="stats"><div class="empty-state"><span class="spinner"></span> جارِ تحميل الأرقام...</div></div>
+    <div class="card">
+      <div class="card-title">توزيع العملاء حسب المرحلة</div>
+      <canvas id="stageChart" height="90"></canvas>
+    </div>
+  </div>
+
+  <div id="tab-finance" class="dash-tab-content" style="display:none;">
+    <div class="stat-grid" id="finance-stats"></div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">التارجت مقابل الفعلي</div>
+        <input id="target-month" type="month" onchange="render()" style="width:auto;">
+      </div>
+      <canvas id="targetChart" height="90"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title">تحديد التارجت الشهري لكل سيلز</div>
+      <div class="grid2">
+        <div class="field"><label>السيلز</label><select id="target-sales-select"></select></div>
+        <div class="field"><label>الشهر</label><input id="target-input-month" type="month"></div>
+        <div class="field"><label>قيمة التارجت</label><input id="target-amount" type="number" min="0"></div>
+        <div class="field"><label>العملة</label>
+          <select id="target-currency"><option value="EGP">جنيه مصري</option><option value="KWD">دينار كويتي</option><option value="OMR">ريال عُماني</option></select>
+        </div>
+      </div>
+      <button class="btn-primary" style="margin-top:10px;" onclick="saveTarget()">حفظ التارجت</button>
+      <div id="target-save-msg" class="hint" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <div id="tab-team" class="dash-tab-content" style="display:none;">
+    <div class="card">
+      <div class="card-title">أداء مصادر العملاء</div>
+      <table class="data-table" id="leadSourceTable"><thead><tr><th>المصدر</th><th>عدد العملاء</th><th>فوز</th><th>نسبة الفوز</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">نشاط الفريق (حسب الفترة المحددة)</div>
+      <table class="data-table" id="activityTable"><thead><tr><th>السيلز</th><th>زيارات</th><th>مكالمات</th><th>متابعات</th><th>الإجمالي</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">أداء كل سيلز</div>
+      <table class="data-table" id="salesTable"><thead><tr><th>السيلز</th><th>إجمالي العملاء</th><th>فوز</th><th>خسارة</th><th>يحتاج استكمال</th><th>قيمة مرجّحة (USD)</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div id="tab-implementation" class="dash-tab-content" style="display:none;">
+    <div class="card">
+      <div class="card-title">مراحل التنفيذ الحالية (للصفقات المكسوبة)</div>
+      <table class="data-table" id="implTable"><thead><tr><th>المرحلة</th><th>عدد العملاء</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">عقود قريبة من التجديد (خلال 60 يوم)</div>
+      <table class="data-table" id="renewalTable"><thead><tr><th>العميل</th><th>تاريخ التجديد</th><th>الأيام المتبقية</th><th>قيمة التجديد</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<div id="print-view" style="display:none;"></div>
+<style>
+  .dash-tabs { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:10px; }
+  @media print {
+    body * { visibility:hidden; }
+    #print-view, #print-view * { visibility:visible; }
+    #print-view { display:block !important; position:absolute; top:0; right:0; left:0; padding:20px; }
+  }
+</style>
+
+<script defer>
+// ============================================================
+// الوضع الليلي (Dark Mode) — بيتطبق فورًا في كل صفحة قبل أي حاجة تانية
+// ملحوظة: بعض المتصفحات (زي Edge مع Tracking Prevention) بتمنع الوصول
+// لـ localStorage تمامًا، فلازم نتعامل مع ده بحذر عشان ميوقفش باقي الكود
+// ============================================================
+function safeStorageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function safeStorageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* تجاهل بهدوء */ }
+}
+
+(function applySavedTheme() {
+  const saved = safeStorageGet('uis-theme');
+  if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    safeStorageSet('uis-theme', 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    safeStorageSet('uis-theme', 'dark');
+  }
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.innerHTML = document.documentElement.getAttribute('data-theme') === 'dark' ? ICONS.sun + ' الوضع النهاري' : ICONS.moon + ' الوضع الليلي';
+}
+
+// ============================================================
+// بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
+// Project Settings → API → Project URL / anon public key
+// ============================================================
+const APP_BUILD_VERSION = 'v17-design';
+const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
+
+// ---------- تحميل مكتبة Supabase ديناميكيًا مع أكتر من مصدر بديل ----------
+// (بدون document.write عشان الكروم مش يتجاهله على النت البطيء)
+const SUPABASE_LIB_SOURCES = [
+  'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
+];
+
+function loadScriptTag(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = () => resolve();
+    el.onerror = () => reject(new Error('failed to load ' + src));
+    document.head.appendChild(el);
+  });
+}
+
+let _libLoadPromise = null;
+function loadSupabaseLib() {
+  if (typeof supabase !== 'undefined') return Promise.resolve();
+  if (_libLoadPromise) return _libLoadPromise;
+  _libLoadPromise = SUPABASE_LIB_SOURCES.reduce(
+    (chain, src) => chain.catch(() => loadScriptTag(src)),
+    Promise.reject()
+  );
+  return _libLoadPromise;
+}
+
+// ---------- تحميل مكتبة Chart.js ديناميكيًا (مستخدمة في لوحة الإدارة بس) ----------
+let _chartLibPromise = null;
+function loadChartLib() {
+  if (typeof Chart !== 'undefined') return Promise.resolve();
+  if (_chartLibPromise) return _chartLibPromise;
+  const sources = [
+    'https://unpkg.com/chart.js@4.4.4/dist/chart.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js',
+  ];
+  _chartLibPromise = sources.reduce(
+    (chain, src) => chain.catch(() => loadScriptTag(src)),
+    Promise.reject()
+  );
+  return _chartLibPromise;
+}
+
+let sb = null;
+let _sbReadyPromise = null;
+function ensureSb() {
+  if (sb) return Promise.resolve(sb);
+  if (_sbReadyPromise) return _sbReadyPromise;
+  _sbReadyPromise = loadSupabaseLib().then(() => {
+    if (typeof supabase === 'undefined') {
+      throw new Error('مكتبة الاتصال بالسيرفر (Supabase) متحمّلتش من أي مصدر. تأكد من اتصال الإنترنت.');
+    }
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return sb;
+  }).catch((e) => {
+    showLibraryError(e.message);
+    throw e;
+  });
+  return _sbReadyPromise;
+}
+
+function showLibraryError(message) {
+  const show = () => {
+    if (document.getElementById('lib-error-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'lib-error-banner';
+    banner.textContent = 'تعذر الاتصال بالسيرفر: ' + message;
+    banner.style.cssText = 'background:#96281B;color:#fff;padding:12px;text-align:center;font-family:Tajawal,sans-serif;font-size:14px;';
+    document.body.insertBefore(banner, document.body.firstChild);
+  };
+  if (document.body) show();
+  else document.addEventListener('DOMContentLoaded', show);
+}
+
+// نبدأ التحميل فورًا من غير ما نستنى حد يطلبها
+ensureSb();
+
+const STAGES = [
+  { key: 'discovery', label: 'الاكتشاف' },
+  { key: 'demo_scheduled', label: 'الديمو مجدول' },
+  { key: 'demo_done', label: 'تم الديمو' },
+  { key: 'proposal', label: 'عرض السعر' },
+  { key: 'negotiation', label: 'التفاوض' },
+  { key: 'won', label: 'تم الإغلاق - فوز' },
+  { key: 'lost', label: 'تم الإغلاق - خسارة' },
+];
+
+function stageLabel(key) {
+  const s = STAGES.find(s => s.key === key);
+  return s ? s.label : key;
+}
+
+// ألوان مميزة لكل مرحلة، تستخدم كخط علوي في أعمدة الـ Kanban
+const STAGE_COLORS = {
+  discovery: '#8CA0B4', demo_scheduled: '#2C7BD1', demo_done: '#1D63B3',
+  proposal: '#B8860B', negotiation: '#8B5CF6', won: '#1E7A4C', lost: '#96281B',
+};
+
+// ---------- الأمان: تنظيف أي نص المستخدم كتبه قبل حقنه في الصفحة ----------
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ---------- Phase 3: الماليات والتوقعات ----------
+// احتمالية الإغلاق التلقائية حسب المرحلة — تقدر تعدّل النسب دي براحتك
+const STAGE_PROBABILITY = {
+  discovery: 0.10, demo_scheduled: 0.25, demo_done: 0.40,
+  proposal: 0.60, negotiation: 0.75, won: 1, lost: 0,
+};
+
+// سعر الصرف التقريبي لكل عملة مقابل الدولار — عدّل الأرقام دي لما الأسعار تتغيّر
+const CURRENCY_TO_USD = { EGP: 1 / 49, KWD: 3.25, OMR: 2.6 };
+
+function weightedValue(client) {
+  const val = Number(client.deal_value) || 0;
+  const prob = STAGE_PROBABILITY[client.stage] ?? 0;
+  return val * prob;
+}
+
+function toUSD(amount, currency) {
+  const rate = CURRENCY_TO_USD[currency] || 1;
+  return (Number(amount) || 0) * rate;
+}
+
+function formatMoney(amount, currency) {
+  const n = Number(amount) || 0;
+  return Math.round(n).toLocaleString('ar-EG') + (currency ? (' ' + currency) : '');
+}
+
+function monthKey(dateStr) {
+  if (!dateStr) return null;
+  return dateStr.slice(0, 7); // "2026-07-15" → "2026-07"
+}
+
+// ---------- تجربة الاستخدام: تنبيهات Toast بدل alert() ----------
+function showToast(message, type = 'info') {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-show'));
+  setTimeout(() => {
+    toast.classList.remove('toast-show');
+    setTimeout(() => toast.remove(), 250);
+  }, 3200);
+}
+
+// ---------- تجربة الاستخدام: قفل أي Modal بزرار Escape أو بالضغط برّه ----------
+(function wireModalDismiss() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    }
+  });
+})();
+
+// ---------- تجربة الاستخدام: تعطيل زرار وقت العملية عشان يمنع ضغط مزدوج ----------
+async function withButtonLoading(button, label, fn) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.innerHTML = label + '<span class="spinner"></span>';
+  try {
+    await fn();
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+// ---------- Phase 4: تتبّع مرحلة التنفيذ بعد كسب الصفقة ----------
+const IMPLEMENTATION_STAGES = [
+  'العقد موقّع',
+  'تركيب الهاردوير',
+  'إدخال البيانات',
+  'التدريب',
+  'اختبار تجريبي',
+  'Go-Live فعلي',
+];
+
+function implementationBadgeClass(stage) {
+  if (stage === 'Go-Live فعلي') return 'badge-received';
+  if (!stage) return 'badge-pending';
+  return 'badge-stage';
+}
+
+// ---------- Phase 6: مصادر العملاء ----------
+const LEAD_SOURCES = ['إحالة عميل', 'معرض / فعالية', 'اتصال بارد', 'موقع الشركة', 'سوشيال ميديا', 'أخرى'];
+
+// ---------- أيقونات بسيطة (SVG) ----------
+const ICONS = {
+  dashboard: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.2"/><rect x="11" y="2.5" width="6.5" height="4" rx="1.2"/><rect x="11" y="8.5" width="6.5" height="9" rx="1.2"/><rect x="2.5" y="11" width="6.5" height="6.5" rx="1.2"/></svg>',
+  users: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="6.5" r="3"/><path d="M2 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="14.5" cy="7" r="2.3"/><path d="M13 12.2c2.6.3 4.5 2.1 4.5 4.8" stroke-linecap="round"/></svg>',
+  pipeline: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.3" y="3" width="4.6" height="14" rx="1"/><rect x="8" y="3" width="4.6" height="9" rx="1"/><rect x="13.7" y="3" width="4.6" height="11" rx="1"/></svg>',
+  review: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3.5" width="12" height="14" rx="1.4"/><rect x="7" y="1.8" width="6" height="3" rx="1"/><path d="M6.7 10.3l1.8 1.8 3.3-3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  logout: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg>',
+  moon: '<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M16.5 12.8A7 7 0 0 1 7.2 3.5a7.5 7.5 0 1 0 9.3 9.3z"/></svg>',
+  sun: '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none"/><path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M4.5 15.5l1.4-1.4M14.1 5.9l1.4-1.4"/></svg>',
+};
+
+// ---------- الشريط الجانبي الموحد ----------
+function renderSidebar(activeKey, profile) {
+  const root = document.getElementById('sidebar-root');
+  if (!root) return;
+  const links = [];
+  if (profile.role === 'admin') {
+    links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة', icon: ICONS.dashboard });
+    links.push({ key: 'users', href: 'users.html', label: 'المستخدمون', icon: ICONS.users });
+  }
+  if (profile.role === 'sales') {
+    links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي', icon: ICONS.pipeline });
+  }
+  if (profile.role === 'support') {
+    links.push({ key: 'review', href: 'support.html', label: 'مراجعة النماذج', icon: ICONS.review });
+  }
+  root.innerHTML = `
+    <div class="sidebar-brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title" style="font-size:14px;">نظام إدارة العملاء</div>
+        <div class="sidebar-user">${escapeHtml(profile.full_name || profile.email || '')}</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      ${links.map(l => `<a class="sidebar-link${l.key === activeKey ? ' active' : ''}" href="${l.href}"><span class="sidebar-icon">${l.icon}</span>${l.label}</a>`).join('')}
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme') === 'dark' ? ICONS.sun + ' الوضع النهاري' : ICONS.moon + ' الوضع الليلي'}</button>
+      <div style="text-align:center; font-size:10px; color:var(--ink-muted); margin-top:6px;">نسخة الكود: ${APP_BUILD_VERSION}</div>
+    </div>
+  `;
+}
+
+function logoutIcon() { return ICONS.logout; }
+
+// ---------- رابط واتساب سريع ----------
+function whatsappLink(phone) {
+  if (!phone) return null;
+  const digits = phone.replace(/[^\d]/g, '');
+  if (!digits) return null;
+  return 'https://wa.me/' + digits;
+}
+
+// ---------- أسباب الخسارة ----------
+const LOSS_REASONS = ['السعر', 'المنافس', 'التوقيت', 'أخرى'];
+
+// ---------- مرفقات العميل (Supabase Storage) ----------
+async function uploadClientFile(clientId, file) {
+  const path = clientId + '/' + Date.now() + '_' + file.name.replace(/[^\w.\-]/g, '_');
+  const { error } = await sb.storage.from('client-files').upload(path, file);
+  if (error) throw error;
+  return path;
+}
+
+async function listClientFiles(clientId) {
+  const { data, error } = await sb.storage.from('client-files').list(clientId, { sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) return [];
+  return data || [];
+}
+
+async function getClientFileUrl(clientId, filename) {
+  const { data, error } = await sb.storage.from('client-files').createSignedUrl(clientId + '/' + filename, 3600);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+async function deleteClientFile(clientId, filename) {
+  await sb.storage.from('client-files').remove([clientId + '/' + filename]);
+}
+
+function reviewBadgeClass(status) {
+  if (status === 'تم الاستلام') return 'badge-received';
+  if (status === 'يحتاج استكمال') return 'badge-needs';
+  return 'badge-pending';
+}
+
+// ---------- Auth helpers ----------
+async function getCurrentProfile() {
+  try {
+    await ensureSb();
+  } catch (e) {
+    return null;
+  }
+  try {
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData || !sessionData.session) return null;
+    const userId = sessionData.session.user.id;
+    const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+    if (error) return null;
+    return data;
+  } catch (e) {
+    console.error('getCurrentProfile failed:', e);
+    return null;
+  }
+}
+
+async function requireRole(allowedRoles) {
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  if (!allowedRoles.includes(profile.role)) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  return profile;
+}
+
+async function logout() {
+  try { await ensureSb(); if (sb) await sb.auth.signOut(); } catch (e) {}
+  window.location.href = 'login.html';
+}
+
+// ---------- Summary builder (used everywhere a client record is displayed) ----------
+function buildClientSummary(d) {
+  const e = escapeHtml;
+  let lines = [];
+  lines.push('العميل: ' + e(d.name || '-') + ' | رقم التواصل: ' + e(d.phone || '-'));
+  lines.push('النشاط: ' + e(d.activity || '-') + ' | عدد الفروع: ' + e(d.branches || '-') + ' | المستخدمين: ' + e(d.users_count || '-'));
+  lines.push('مطبخ / مصنع مركزي: ' + e(d.warehouse || '-') + ' | عدد المخازن: ' + e(d.warehouse_count || '-'));
+  lines.push('المسؤول: ' + e(d.contact || '-') + ' | الدولة: ' + e(d.country || '-'));
+  lines.push('');
+  lines.push('النظام الحالي: ' + e(d.has_system || '-') + (d.sys_name ? (' — ' + e(d.sys_name)) : '') + (d.sys_age ? (' — منذ ' + e(d.sys_age)) : '') + (d.sys_type ? (' — ' + e(d.sys_type)) : ''));
+  lines.push('');
+  const problems = d.problems || [];
+  lines.push('المشاكل:');
+  if (problems.length === 0) lines.push('  (لا يوجد)');
+  problems.forEach((p, i) => lines.push('  ' + (i + 1) + '. ' + e(p.issue) + (p.detail ? (' — ' + e(p.detail)) : '') + (p.priority ? (' [' + e(p.priority) + ']') : '')));
+  lines.push('');
+  lines.push('الاحتياجات والتقارير: ' + e(d.needs || '-'));
+  lines.push('');
+  const modules = d.modules || [];
+  lines.push('الموديولات المطلوبة: ' + (modules.length ? e(modules.join('، ')) : '-'));
+  lines.push('');
+  lines.push('حضور الديمو: ' + e(d.attendees || '-') + ' | صاحب القرار: ' + e(d.decision || '-'));
+  lines.push('الإدارة المالية: ' + e(d.finance || '-') + ' | التشغيل: ' + e(d.ops || '-'));
+  lines.push('');
+  lines.push('الديمو المقترح: ' + e(d.demo_date || '-') + ' ' + e(d.demo_time || '') + ' — ' + e(d.demo_place || '-'));
+  return lines.join('\n');
+}
+
+function collectProblemsFromDom(containerId) {
+  const rows = document.querySelectorAll('#' + containerId + ' .problem-row');
+  const out = [];
+  rows.forEach(r => {
+    const idPrefix = r.getAttribute('data-id');
+    const issue = document.getElementById(idPrefix + '_issue').value.trim();
+    const detail = document.getElementById(idPrefix + '_detail').value.trim();
+    const priority = document.getElementById(idPrefix + '_priority').value;
+    if (issue || detail) out.push({ issue, detail, priority });
+  });
+  return out;
+}
+
+</script>
+<script defer>
+let currentProfile = null;
+let allClients = [];
+let profilesById = {};
+let allTargets = [];
+let allActivities = [];
+let chartInstance = null;
+let targetChartInstance = null;
+
+(async function init() {
+  currentProfile = await requireRole(['admin']);
+  if (!currentProfile) return;
+  renderSidebar('dashboard', currentProfile);
+  document.getElementById('who').textContent = (currentProfile.full_name || 'الإدارة');
+
+  try { await loadChartLib(); } catch (e) { console.error('تعذر تحميل مكتبة الرسوم البيانية:', e); }
+
+  const { data: profiles } = await sb.from('profiles').select('*');
+  (profiles || []).forEach(p => profilesById[p.id] = p);
+
+  const salesSelect = document.getElementById('target-sales-select');
+  salesSelect.innerHTML = (profiles || []).filter(p => p.role === 'sales')
+    .map(p => `<option value="${p.id}">${p.full_name || p.id}</option>`).join('');
+
+  const now = new Date();
+  const curMonth = now.toISOString().slice(0, 7);
+  document.getElementById('target-month').value = curMonth;
+  document.getElementById('target-input-month').value = curMonth;
+
+  const { data, error } = await sb.from('clients').select('*');
+  if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
+  allClients = data || [];
+
+  const { data: targets } = await sb.from('sales_targets').select('*');
+  allTargets = targets || [];
+
+  const { data: activities } = await sb.from('activities').select('*');
+  allActivities = activities || [];
+
+  render();
+})();
+
+function switchDashTab(key) {
+  ['overview', 'finance', 'team', 'implementation'].forEach(k => {
+    document.getElementById('tab-' + k).style.display = k === key ? 'block' : 'none';
+    document.getElementById('dtab-' + k).classList.toggle('active', k === key);
+  });
+  // الرسوم البيانية جوه تابات مخفية بتحتاج resize لما تظهر تاني
+  if (key === 'overview' && chartInstance) chartInstance.resize();
+  if (key === 'finance' && targetChartInstance) targetChartInstance.resize();
+}
+
+function filteredClients() {
+  const country = document.getElementById('country-filter').value;
+  const from = document.getElementById('date-from').value;
+  const to = document.getElementById('date-to').value;
+  return allClients.filter(c => {
+    if (country && c.country !== country) return false;
+    if (from && c.created_at < from) return false;
+    if (to && c.created_at > (to + 'T23:59:59')) return false;
+    return true;
+  });
+}
+
+function render() {
+  const items = filteredClients();
+
+  const total = items.length;
+  const won = items.filter(c => c.stage === 'won').length;
+  const needsCompletion = items.filter(c => c.review_status === 'يحتاج استكمال').length;
+  const inDemoOrLater = items.filter(c => c.stage !== 'discovery').length;
+  const conversionToDemo = total ? Math.round((inDemoOrLater / total) * 100) : 0;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card stat-accent-blue"><div class="stat-value">${total}</div><div class="stat-label">إجمالي العملاء في الـ Pipeline</div></div>
+    <div class="stat-card stat-accent-blue"><div class="stat-value">${conversionToDemo}%</div><div class="stat-label">نسبة التحويل Discovery → Demo</div></div>
+    <div class="stat-card stat-accent-green"><div class="stat-value">${won}</div><div class="stat-label">عملاء تم إغلاقهم (فوز)</div></div>
+    <div class="stat-card stat-accent-amber"><div class="stat-value">${needsCompletion}</div><div class="stat-label">نماذج تحتاج استكمال بيانات</div></div>
+  `;
+
+  // ---------- Phase 3: KPIs مالية ----------
+  const openDeals = items.filter(c => c.stage !== 'won' && c.stage !== 'lost');
+  const weightedPipelineUsd = openDeals.reduce((sum, c) => sum + toUSD(weightedValue(c), c.currency), 0);
+  const wonUsd = items.filter(c => c.stage === 'won').reduce((sum, c) => sum + toUSD(c.deal_value, c.currency), 0);
+  const targetMonth = document.getElementById('target-month').value;
+  const wonThisMonth = items.filter(c => c.stage === 'won' && monthKey(c.expected_close_date) === targetMonth)
+    .reduce((sum, c) => sum + toUSD(c.deal_value, c.currency), 0);
+  const targetsThisMonth = allTargets.filter(t => t.month.slice(0, 7) === targetMonth)
+    .reduce((sum, t) => sum + toUSD(t.target_amount, t.currency), 0);
+  const achievement = targetsThisMonth ? Math.round((wonThisMonth / targetsThisMonth) * 100) : 0;
+
+  const todayMs = Date.now();
+  const upcomingRenewals = items
+    .filter(c => c.renewal_date)
+    .map(c => ({ ...c, daysLeft: Math.round((new Date(c.renewal_date).getTime() - todayMs) / 86400000) }))
+    .filter(c => c.daysLeft >= 0 && c.daysLeft <= 60)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+  const renewalCount = upcomingRenewals.length;
+
+  document.getElementById('finance-stats').innerHTML = `
+    <div class="stat-card stat-accent-blue"><div class="stat-value">$${Math.round(weightedPipelineUsd).toLocaleString()}</div><div class="stat-label">قيمة الـ Pipeline المرجّحة (تقديري)</div></div>
+    <div class="stat-card stat-accent-green"><div class="stat-value">$${Math.round(wonUsd).toLocaleString()}</div><div class="stat-label">إجمالي قيمة العملاء المُغلَقين</div></div>
+    <div class="stat-card stat-accent-green"><div class="stat-value">$${Math.round(wonThisMonth).toLocaleString()}</div><div class="stat-label">إيراد فعلي — الشهر المحدد</div></div>
+    <div class="stat-card stat-accent-blue"><div class="stat-value">${achievement}%</div><div class="stat-label">نسبة تحقيق التارجت — الشهر المحدد</div></div>
+    <div class="stat-card stat-accent-amber"><div class="stat-value">${renewalCount}</div><div class="stat-label">عقود قريبة من التجديد (٦٠ يوم)</div></div>
+  `;
+
+  const stageCounts = STAGES.map(s => items.filter(c => c.stage === s.key).length);
+  try {
+    if (typeof Chart !== 'undefined') {
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(document.getElementById('stageChart'), {
+        type: 'bar',
+        data: { labels: STAGES.map(s => s.label), datasets: [{ data: stageCounts, backgroundColor: '#1D63B3', borderRadius: 6 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+    }
+  } catch (e) { console.error('stage chart failed:', e); }
+
+  try { renderTargetChart(items, targetMonth); } catch (e) { console.error('target chart failed:', e); }
+
+  const renewalTbody = document.querySelector('#renewalTable tbody');
+  renewalTbody.innerHTML = upcomingRenewals.map(c => `
+    <tr>
+      <td>${escapeHtml(c.name)}</td>
+      <td>${c.renewal_date}</td>
+      <td>${c.daysLeft} يوم</td>
+      <td>${formatMoney(c.renewal_value, c.currency)}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="hint">لا توجد عقود قريبة من التجديد</td></tr>';
+
+  const wonItems = items.filter(c => c.stage === 'won');
+  const implTbody = document.querySelector('#implTable tbody');
+  const implRows = IMPLEMENTATION_STAGES.map(s => `<tr><td>${s}</td><td>${wonItems.filter(c => c.implementation_stage === s).length}</td></tr>`).join('');
+  const notStartedCount = wonItems.filter(c => !c.implementation_stage).length;
+  implTbody.innerHTML = `<tr><td>لم تبدأ بعد</td><td>${notStartedCount}</td></tr>` + implRows;
+
+  const bySource = {};
+  items.forEach(c => {
+    const key = c.lead_source || 'غير محدد';
+    if (!bySource[key]) bySource[key] = { total: 0, won: 0 };
+    bySource[key].total++;
+    if (c.stage === 'won') bySource[key].won++;
+  });
+  const leadTbody = document.querySelector('#leadSourceTable tbody');
+  leadTbody.innerHTML = Object.entries(bySource).map(([source, s]) => `
+    <tr>
+      <td>${escapeHtml(source)}</td>
+      <td>${s.total}</td><td>${s.won}</td>
+      <td>${s.total ? Math.round((s.won / s.total) * 100) : 0}%</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="hint">لا توجد بيانات</td></tr>';
+
+  const from = document.getElementById('date-from').value;
+  const to = document.getElementById('date-to').value;
+  const filteredActivities = allActivities.filter(a => {
+    if (from && a.activity_date < from) return false;
+    if (to && a.activity_date > to) return false;
+    return true;
+  });
+  const bySalesActivity = {};
+  filteredActivities.forEach(a => {
+    const key = a.sales_id || 'unknown';
+    if (!bySalesActivity[key]) bySalesActivity[key] = { visit: 0, call: 0, follow: 0 };
+    if (a.activity_type === 'زيارة') bySalesActivity[key].visit++;
+    else if (a.activity_type === 'مكالمة') bySalesActivity[key].call++;
+    else bySalesActivity[key].follow++;
+  });
+  const activityTbody = document.querySelector('#activityTable tbody');
+  activityTbody.innerHTML = Object.entries(bySalesActivity).map(([id, a]) => `
+    <tr>
+      <td>${escapeHtml((profilesById[id] && profilesById[id].full_name) || 'غير معروف')}</td>
+      <td>${a.visit}</td><td>${a.call}</td><td>${a.follow}</td><td>${a.visit + a.call + a.follow}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="hint">لا يوجد نشاط مسجّل في الفترة دي</td></tr>';
+
+  const bySales = {};
+  items.forEach(c => {
+    const key = c.sales_id || 'unknown';
+    if (!bySales[key]) bySales[key] = { total: 0, won: 0, lost: 0, needs: 0, weighted: 0 };
+    bySales[key].total++;
+    if (c.stage === 'won') bySales[key].won++;
+    if (c.stage === 'lost') bySales[key].lost++;
+    if (c.review_status === 'يحتاج استكمال') bySales[key].needs++;
+    bySales[key].weighted += toUSD(weightedValue(c), c.currency);
+  });
+  const tbody = document.querySelector('#salesTable tbody');
+  tbody.innerHTML = Object.entries(bySales).map(([id, s]) => `
+    <tr>
+      <td>${escapeHtml((profilesById[id] && profilesById[id].full_name) || 'غير معروف')}</td>
+      <td>${s.total}</td><td>${s.won}</td><td>${s.lost}</td><td>${s.needs}</td>
+      <td>$${Math.round(s.weighted).toLocaleString()}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="hint">لا توجد بيانات</td></tr>';
+}
+
+function renderTargetChart(items, targetMonth) {
+  const salesReps = Object.values(profilesById).filter(p => p.role === 'sales');
+  const labels = salesReps.map(p => p.full_name || p.id);
+  const actuals = salesReps.map(p =>
+    items.filter(c => c.sales_id === p.id && c.stage === 'won' && monthKey(c.expected_close_date) === targetMonth)
+      .reduce((sum, c) => sum + toUSD(c.deal_value, c.currency), 0)
+  );
+  const targets = salesReps.map(p => {
+    const t = allTargets.find(t => t.sales_id === p.id && t.month.slice(0, 7) === targetMonth);
+    return t ? toUSD(t.target_amount, t.currency) : 0;
+  });
+
+  if (typeof Chart === 'undefined') return;
+  if (targetChartInstance) targetChartInstance.destroy();
+  targetChartInstance = new Chart(document.getElementById('targetChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'التارجت', data: targets, backgroundColor: '#CFE0F2', borderRadius: 6 },
+        { label: 'الفعلي', data: actuals, backgroundColor: '#1D63B3', borderRadius: 6 },
+      ]
+    },
+    options: { scales: { y: { beginAtZero: true } } }
+  });
+}
+
+async function saveTarget() {
+  const msgEl = document.getElementById('target-save-msg');
+  const sales_id = document.getElementById('target-sales-select').value;
+  const month = document.getElementById('target-input-month').value + '-01';
+  const target_amount = document.getElementById('target-amount').value || 0;
+  const currency = document.getElementById('target-currency').value;
+  const { error } = await sb.from('sales_targets').upsert(
+    { sales_id, month, target_amount, currency },
+    { onConflict: 'sales_id,month' }
+  );
+  if (error) { msgEl.textContent = 'خطأ: ' + error.message; return; }
+  msgEl.textContent = 'تم حفظ التارجت.';
+  const { data: targets } = await sb.from('sales_targets').select('*');
+  allTargets = targets || [];
+  render();
+}
+
+function exportPdf() {
+  const items = filteredClients();
+  const from = document.getElementById('date-from').value || 'البداية';
+  const to = document.getElementById('date-to').value || 'الآن';
+  const statsHtml = document.getElementById('stats').innerHTML;
+  const financeHtml = document.getElementById('finance-stats').innerHTML;
+  const chartImg = document.getElementById('stageChart').toDataURL('image/png');
+  const targetChartImg = document.getElementById('targetChart').toDataURL('image/png');
+  const tableHtml = document.getElementById('salesTable').outerHTML;
+  document.getElementById('print-view').innerHTML = `
+    <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
+      <h2 style="color:#0B2C52;">تقرير الإدارة — من ${from} إلى ${to}</h2>
+      <div style="display:flex; flex-wrap:wrap; gap:10px;">${statsHtml}</div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${financeHtml}</div>
+      <h3>توزيع العملاء حسب المرحلة</h3>
+      <img src="${chartImg}" style="max-width:100%;">
+      <h3>التارجت مقابل الفعلي</h3>
+      <img src="${targetChartImg}" style="max-width:100%;">
+      <h3>أداء كل سيلز</h3>
+      ${tableHtml}
+    </div>
+  `;
+  window.print();
+}
+</script>
+</body>
+</html>

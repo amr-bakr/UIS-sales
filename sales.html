@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة العملاء — السيلز</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://lndacyhcjrpybbsjwupw.supabase.co">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="icon" href="data:,">
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="assets/styles.css?v=17">
+</head>
+<body>
+<div class="app-shell">
+<div class="sidebar" id="sidebar-root"></div>
+<div class="main-content">
+<div class="wrap" style="position:relative;">
+  <div class="topbar">
+    <div>
+      <div class="brand-title">عملائي</div>
+      <div class="brand-sub" id="who">...</div>
+    </div>
+    <div class="nav-links">
+      <button class="btn-primary" onclick="openNewClientModal()">+ عميل جديد</button>
+      <button class="btn-logout" onclick="logout()"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg> خروج</button>
+    </div>
+  </div>
+
+  <div class="kanban" id="kanban"><div class="empty-state"><span class="spinner"></span> جارِ تحميل العملاء...</div></div>
+</div>
+
+<div id="modal-root"></div>
+</div>
+</div>
+
+<script defer>
+// ============================================================
+// الوضع الليلي (Dark Mode) — بيتطبق فورًا في كل صفحة قبل أي حاجة تانية
+// ملحوظة: بعض المتصفحات (زي Edge مع Tracking Prevention) بتمنع الوصول
+// لـ localStorage تمامًا، فلازم نتعامل مع ده بحذر عشان ميوقفش باقي الكود
+// ============================================================
+function safeStorageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function safeStorageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* تجاهل بهدوء */ }
+}
+
+(function applySavedTheme() {
+  const saved = safeStorageGet('uis-theme');
+  if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    safeStorageSet('uis-theme', 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    safeStorageSet('uis-theme', 'dark');
+  }
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.innerHTML = document.documentElement.getAttribute('data-theme') === 'dark' ? ICONS.sun + ' الوضع النهاري' : ICONS.moon + ' الوضع الليلي';
+}
+
+// ============================================================
+// بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
+// Project Settings → API → Project URL / anon public key
+// ============================================================
+const APP_BUILD_VERSION = 'v17-design';
+const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
+
+// ---------- تحميل مكتبة Supabase ديناميكيًا مع أكتر من مصدر بديل ----------
+// (بدون document.write عشان الكروم مش يتجاهله على النت البطيء)
+const SUPABASE_LIB_SOURCES = [
+  'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
+];
+
+function loadScriptTag(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = () => resolve();
+    el.onerror = () => reject(new Error('failed to load ' + src));
+    document.head.appendChild(el);
+  });
+}
+
+let _libLoadPromise = null;
+function loadSupabaseLib() {
+  if (typeof supabase !== 'undefined') return Promise.resolve();
+  if (_libLoadPromise) return _libLoadPromise;
+  _libLoadPromise = SUPABASE_LIB_SOURCES.reduce(
+    (chain, src) => chain.catch(() => loadScriptTag(src)),
+    Promise.reject()
+  );
+  return _libLoadPromise;
+}
+
+// ---------- تحميل مكتبة Chart.js ديناميكيًا (مستخدمة في لوحة الإدارة بس) ----------
+let _chartLibPromise = null;
+function loadChartLib() {
+  if (typeof Chart !== 'undefined') return Promise.resolve();
+  if (_chartLibPromise) return _chartLibPromise;
+  const sources = [
+    'https://unpkg.com/chart.js@4.4.4/dist/chart.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js',
+  ];
+  _chartLibPromise = sources.reduce(
+    (chain, src) => chain.catch(() => loadScriptTag(src)),
+    Promise.reject()
+  );
+  return _chartLibPromise;
+}
+
+let sb = null;
+let _sbReadyPromise = null;
+function ensureSb() {
+  if (sb) return Promise.resolve(sb);
+  if (_sbReadyPromise) return _sbReadyPromise;
+  _sbReadyPromise = loadSupabaseLib().then(() => {
+    if (typeof supabase === 'undefined') {
+      throw new Error('مكتبة الاتصال بالسيرفر (Supabase) متحمّلتش من أي مصدر. تأكد من اتصال الإنترنت.');
+    }
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return sb;
+  }).catch((e) => {
+    showLibraryError(e.message);
+    throw e;
+  });
+  return _sbReadyPromise;
+}
+
+function showLibraryError(message) {
+  const show = () => {
+    if (document.getElementById('lib-error-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'lib-error-banner';
+    banner.textContent = 'تعذر الاتصال بالسيرفر: ' + message;
+    banner.style.cssText = 'background:#96281B;color:#fff;padding:12px;text-align:center;font-family:Tajawal,sans-serif;font-size:14px;';
+    document.body.insertBefore(banner, document.body.firstChild);
+  };
+  if (document.body) show();
+  else document.addEventListener('DOMContentLoaded', show);
+}
+
+// نبدأ التحميل فورًا من غير ما نستنى حد يطلبها
+ensureSb();
+
+const STAGES = [
+  { key: 'discovery', label: 'الاكتشاف' },
+  { key: 'demo_scheduled', label: 'الديمو مجدول' },
+  { key: 'demo_done', label: 'تم الديمو' },
+  { key: 'proposal', label: 'عرض السعر' },
+  { key: 'negotiation', label: 'التفاوض' },
+  { key: 'won', label: 'تم الإغلاق - فوز' },
+  { key: 'lost', label: 'تم الإغلاق - خسارة' },
+];
+
+function stageLabel(key) {
+  const s = STAGES.find(s => s.key === key);
+  return s ? s.label : key;
+}
+
+// ألوان مميزة لكل مرحلة، تستخدم كخط علوي في أعمدة الـ Kanban
+const STAGE_COLORS = {
+  discovery: '#8CA0B4', demo_scheduled: '#2C7BD1', demo_done: '#1D63B3',
+  proposal: '#B8860B', negotiation: '#8B5CF6', won: '#1E7A4C', lost: '#96281B',
+};
+
+// ---------- الأمان: تنظيف أي نص المستخدم كتبه قبل حقنه في الصفحة ----------
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ---------- Phase 3: الماليات والتوقعات ----------
+// احتمالية الإغلاق التلقائية حسب المرحلة — تقدر تعدّل النسب دي براحتك
+const STAGE_PROBABILITY = {
+  discovery: 0.10, demo_scheduled: 0.25, demo_done: 0.40,
+  proposal: 0.60, negotiation: 0.75, won: 1, lost: 0,
+};
+
+// سعر الصرف التقريبي لكل عملة مقابل الدولار — عدّل الأرقام دي لما الأسعار تتغيّر
+const CURRENCY_TO_USD = { EGP: 1 / 49, KWD: 3.25, OMR: 2.6 };
+
+function weightedValue(client) {
+  const val = Number(client.deal_value) || 0;
+  const prob = STAGE_PROBABILITY[client.stage] ?? 0;
+  return val * prob;
+}
+
+function toUSD(amount, currency) {
+  const rate = CURRENCY_TO_USD[currency] || 1;
+  return (Number(amount) || 0) * rate;
+}
+
+function formatMoney(amount, currency) {
+  const n = Number(amount) || 0;
+  return Math.round(n).toLocaleString('ar-EG') + (currency ? (' ' + currency) : '');
+}
+
+function monthKey(dateStr) {
+  if (!dateStr) return null;
+  return dateStr.slice(0, 7); // "2026-07-15" → "2026-07"
+}
+
+// ---------- تجربة الاستخدام: تنبيهات Toast بدل alert() ----------
+function showToast(message, type = 'info') {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-show'));
+  setTimeout(() => {
+    toast.classList.remove('toast-show');
+    setTimeout(() => toast.remove(), 250);
+  }, 3200);
+}
+
+// ---------- تجربة الاستخدام: قفل أي Modal بزرار Escape أو بالضغط برّه ----------
+(function wireModalDismiss() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    }
+  });
+})();
+
+// ---------- تجربة الاستخدام: تعطيل زرار وقت العملية عشان يمنع ضغط مزدوج ----------
+async function withButtonLoading(button, label, fn) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.innerHTML = label + '<span class="spinner"></span>';
+  try {
+    await fn();
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+// ---------- Phase 4: تتبّع مرحلة التنفيذ بعد كسب الصفقة ----------
+const IMPLEMENTATION_STAGES = [
+  'العقد موقّع',
+  'تركيب الهاردوير',
+  'إدخال البيانات',
+  'التدريب',
+  'اختبار تجريبي',
+  'Go-Live فعلي',
+];
+
+function implementationBadgeClass(stage) {
+  if (stage === 'Go-Live فعلي') return 'badge-received';
+  if (!stage) return 'badge-pending';
+  return 'badge-stage';
+}
+
+// ---------- Phase 6: مصادر العملاء ----------
+const LEAD_SOURCES = ['إحالة عميل', 'معرض / فعالية', 'اتصال بارد', 'موقع الشركة', 'سوشيال ميديا', 'أخرى'];
+
+// ---------- أيقونات بسيطة (SVG) ----------
+const ICONS = {
+  dashboard: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.2"/><rect x="11" y="2.5" width="6.5" height="4" rx="1.2"/><rect x="11" y="8.5" width="6.5" height="9" rx="1.2"/><rect x="2.5" y="11" width="6.5" height="6.5" rx="1.2"/></svg>',
+  users: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="6.5" r="3"/><path d="M2 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="14.5" cy="7" r="2.3"/><path d="M13 12.2c2.6.3 4.5 2.1 4.5 4.8" stroke-linecap="round"/></svg>',
+  pipeline: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.3" y="3" width="4.6" height="14" rx="1"/><rect x="8" y="3" width="4.6" height="9" rx="1"/><rect x="13.7" y="3" width="4.6" height="11" rx="1"/></svg>',
+  review: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3.5" width="12" height="14" rx="1.4"/><rect x="7" y="1.8" width="6" height="3" rx="1"/><path d="M6.7 10.3l1.8 1.8 3.3-3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  logout: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg>',
+  moon: '<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M16.5 12.8A7 7 0 0 1 7.2 3.5a7.5 7.5 0 1 0 9.3 9.3z"/></svg>',
+  sun: '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none"/><path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M4.5 15.5l1.4-1.4M14.1 5.9l1.4-1.4"/></svg>',
+};
+
+// ---------- الشريط الجانبي الموحد ----------
+function renderSidebar(activeKey, profile) {
+  const root = document.getElementById('sidebar-root');
+  if (!root) return;
+  const links = [];
+  if (profile.role === 'admin') {
+    links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة', icon: ICONS.dashboard });
+    links.push({ key: 'users', href: 'users.html', label: 'المستخدمون', icon: ICONS.users });
+  }
+  if (profile.role === 'sales') {
+    links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي', icon: ICONS.pipeline });
+  }
+  if (profile.role === 'support') {
+    links.push({ key: 'review', href: 'support.html', label: 'مراجعة النماذج', icon: ICONS.review });
+  }
+  root.innerHTML = `
+    <div class="sidebar-brand">
+      <div class="brand-mark">UIS</div>
+      <div>
+        <div class="brand-title" style="font-size:14px;">نظام إدارة العملاء</div>
+        <div class="sidebar-user">${escapeHtml(profile.full_name || profile.email || '')}</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      ${links.map(l => `<a class="sidebar-link${l.key === activeKey ? ' active' : ''}" href="${l.href}"><span class="sidebar-icon">${l.icon}</span>${l.label}</a>`).join('')}
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme') === 'dark' ? ICONS.sun + ' الوضع النهاري' : ICONS.moon + ' الوضع الليلي'}</button>
+      <div style="text-align:center; font-size:10px; color:var(--ink-muted); margin-top:6px;">نسخة الكود: ${APP_BUILD_VERSION}</div>
+    </div>
+  `;
+}
+
+function logoutIcon() { return ICONS.logout; }
+
+// ---------- رابط واتساب سريع ----------
+function whatsappLink(phone) {
+  if (!phone) return null;
+  const digits = phone.replace(/[^\d]/g, '');
+  if (!digits) return null;
+  return 'https://wa.me/' + digits;
+}
+
+// ---------- أسباب الخسارة ----------
+const LOSS_REASONS = ['السعر', 'المنافس', 'التوقيت', 'أخرى'];
+
+// ---------- مرفقات العميل (Supabase Storage) ----------
+async function uploadClientFile(clientId, file) {
+  const path = clientId + '/' + Date.now() + '_' + file.name.replace(/[^\w.\-]/g, '_');
+  const { error } = await sb.storage.from('client-files').upload(path, file);
+  if (error) throw error;
+  return path;
+}
+
+async function listClientFiles(clientId) {
+  const { data, error } = await sb.storage.from('client-files').list(clientId, { sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) return [];
+  return data || [];
+}
+
+async function getClientFileUrl(clientId, filename) {
+  const { data, error } = await sb.storage.from('client-files').createSignedUrl(clientId + '/' + filename, 3600);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+async function deleteClientFile(clientId, filename) {
+  await sb.storage.from('client-files').remove([clientId + '/' + filename]);
+}
+
+function reviewBadgeClass(status) {
+  if (status === 'تم الاستلام') return 'badge-received';
+  if (status === 'يحتاج استكمال') return 'badge-needs';
+  return 'badge-pending';
+}
+
+// ---------- Auth helpers ----------
+async function getCurrentProfile() {
+  try {
+    await ensureSb();
+  } catch (e) {
+    return null;
+  }
+  try {
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData || !sessionData.session) return null;
+    const userId = sessionData.session.user.id;
+    const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+    if (error) return null;
+    return data;
+  } catch (e) {
+    console.error('getCurrentProfile failed:', e);
+    return null;
+  }
+}
+
+async function requireRole(allowedRoles) {
+  const profile = await getCurrentProfile();
+  if (!profile) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  if (!allowedRoles.includes(profile.role)) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  return profile;
+}
+
+async function logout() {
+  try { await ensureSb(); if (sb) await sb.auth.signOut(); } catch (e) {}
+  window.location.href = 'login.html';
+}
+
+// ---------- Summary builder (used everywhere a client record is displayed) ----------
+function buildClientSummary(d) {
+  const e = escapeHtml;
+  let lines = [];
+  lines.push('العميل: ' + e(d.name || '-') + ' | رقم التواصل: ' + e(d.phone || '-'));
+  lines.push('النشاط: ' + e(d.activity || '-') + ' | عدد الفروع: ' + e(d.branches || '-') + ' | المستخدمين: ' + e(d.users_count || '-'));
+  lines.push('مطبخ / مصنع مركزي: ' + e(d.warehouse || '-') + ' | عدد المخازن: ' + e(d.warehouse_count || '-'));
+  lines.push('المسؤول: ' + e(d.contact || '-') + ' | الدولة: ' + e(d.country || '-'));
+  lines.push('');
+  lines.push('النظام الحالي: ' + e(d.has_system || '-') + (d.sys_name ? (' — ' + e(d.sys_name)) : '') + (d.sys_age ? (' — منذ ' + e(d.sys_age)) : '') + (d.sys_type ? (' — ' + e(d.sys_type)) : ''));
+  lines.push('');
+  const problems = d.problems || [];
+  lines.push('المشاكل:');
+  if (problems.length === 0) lines.push('  (لا يوجد)');
+  problems.forEach((p, i) => lines.push('  ' + (i + 1) + '. ' + e(p.issue) + (p.detail ? (' — ' + e(p.detail)) : '') + (p.priority ? (' [' + e(p.priority) + ']') : '')));
+  lines.push('');
+  lines.push('الاحتياجات والتقارير: ' + e(d.needs || '-'));
+  lines.push('');
+  const modules = d.modules || [];
+  lines.push('الموديولات المطلوبة: ' + (modules.length ? e(modules.join('، ')) : '-'));
+  lines.push('');
+  lines.push('حضور الديمو: ' + e(d.attendees || '-') + ' | صاحب القرار: ' + e(d.decision || '-'));
+  lines.push('الإدارة المالية: ' + e(d.finance || '-') + ' | التشغيل: ' + e(d.ops || '-'));
+  lines.push('');
+  lines.push('الديمو المقترح: ' + e(d.demo_date || '-') + ' ' + e(d.demo_time || '') + ' — ' + e(d.demo_place || '-'));
+  return lines.join('\n');
+}
+
+function collectProblemsFromDom(containerId) {
+  const rows = document.querySelectorAll('#' + containerId + ' .problem-row');
+  const out = [];
+  rows.forEach(r => {
+    const idPrefix = r.getAttribute('data-id');
+    const issue = document.getElementById(idPrefix + '_issue').value.trim();
+    const detail = document.getElementById(idPrefix + '_detail').value.trim();
+    const priority = document.getElementById(idPrefix + '_priority').value;
+    if (issue || detail) out.push({ issue, detail, priority });
+  });
+  return out;
+}
+
+</script>
+<script defer>
+let currentProfile = null;
+let allClients = [];
+
+(async function init() {
+  currentProfile = await requireRole(['sales', 'admin', 'support']);
+  if (!currentProfile) return;
+  renderSidebar('pipeline', currentProfile);
+  document.getElementById('who').textContent = (currentProfile.full_name || 'سيلز');
+  await loadClients();
+})();
+
+async function loadClients() {
+  const { data, error } = await sb.from('clients').select('*').eq('sales_id', currentProfile.id).order('created_at', { ascending: false });
+  if (error) { showToast('خطأ في تحميل العملاء: ' + error.message, 'error'); return; }
+  allClients = data || [];
+  renderKanban();
+}
+
+function renderKanban() {
+  const el = document.getElementById('kanban');
+  el.innerHTML = '';
+  STAGES.forEach(stage => {
+    const col = document.createElement('div');
+    col.className = 'kanban-col';
+    col.style.borderTop = `3px solid ${STAGE_COLORS[stage.key] || 'var(--blue-500)'}`;
+    const items = allClients.filter(c => c.stage === stage.key);
+    col.innerHTML = `<div class="kanban-col-title"><span>${stage.label}</span><span>${items.length}</span></div>`;
+    if (items.length === 0) {
+      col.innerHTML += '<div class="hint" style="text-align:center; padding:16px 4px;">لا يوجد عملاء هنا</div>';
+    }
+    items.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'kanban-card';
+      card.onclick = () => openClientModal(c);
+      const isOverdue = c.next_follow_up_date && c.next_follow_up_date < new Date().toISOString().slice(0, 10) && c.stage !== 'won' && c.stage !== 'lost';
+      card.innerHTML = `
+        <div class="kanban-card-name">${escapeHtml(c.name || '-')}</div>
+        <div class="kanban-card-meta">${escapeHtml(c.phone || '')}</div>
+        <div class="kanban-card-meta">${c.deal_value ? formatMoney(c.deal_value, c.currency) : ''}</div>
+        <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+          <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${escapeHtml(c.review_status)}</span>
+          ${c.stage === 'won' && c.implementation_stage ? `<span class="badge-pill ${implementationBadgeClass(c.implementation_stage)}">${escapeHtml(c.implementation_stage)}</span>` : ''}
+          ${isOverdue ? '<span class="badge-pill badge-needs">متابعة متأخرة</span>' : ''}
+        </div>
+      `;
+      col.appendChild(card);
+    });
+    el.appendChild(col);
+  });
+}
+
+// ---------- New client modal ----------
+function openNewClientModal() {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box">
+      <div class="modal-head"><div class="card-title" style="margin:0;">عميل جديد — نموذج الاكتشاف</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      ${discoveryFormHtml('new')}
+      <div id="new-error" class="error-box" style="display:none;"></div>
+      <button class="btn-primary" id="new-client-save-btn" style="width:100%; margin-top:12px;" onclick="submitNewClient()">حفظ العميل</button>
+    </div>
+  </div>`;
+  initProblemRows('new');
+}
+
+function discoveryFormHtml(prefix) {
+  return `
+    <div class="grid2">
+      <div class="field"><label>اسم الشركة / العميل <span class="req">*</span></label><input id="${prefix}_name" type="text"></div>
+      <div class="field"><label>رقم التواصل مع العميل</label><input id="${prefix}_phone" type="tel"></div>
+      <div class="field"><label>الدولة</label>
+        <select id="${prefix}_country"><option value="">اختر...</option><option>مصر</option><option>الكويت</option><option>عُمان</option></select>
+      </div>
+      <div class="field"><label>النشاط</label>
+        <select id="${prefix}_activity"><option value="">اختر...</option><option>مطعم فرع واحد</option><option>سلسلة مطاعم</option><option>كافيه</option><option>أخرى</option></select>
+      </div>
+      <div class="field"><label>عدد الفروع</label><input id="${prefix}_branches" type="number"></div>
+      <div class="field"><label>عدد المستخدمين</label><input id="${prefix}_users" type="number"></div>
+      <div class="field"><label>يوجد مطبخ / مصنع مركزي؟</label><select id="${prefix}_warehouse"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>عدد المخازن</label><input id="${prefix}_warehouseCount" type="number"></div>
+      <div class="field"><label>اسم المسؤول ومنصبه</label><input id="${prefix}_contact" type="text"></div>
+      <div class="field"><label>تاريخ الزيارة</label><input id="${prefix}_date" type="date"></div>
+      <div class="field"><label>مصدر العميل</label>
+        <select id="${prefix}_leadSource"><option value="">اختر...</option>${LEAD_SOURCES.map(s => `<option>${s}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="card-title" style="margin-top:16px;">النظام الحالي</div>
+    <div class="grid2">
+      <div class="field"><label>يعملون على نظام حالياً؟</label><select id="${prefix}_hasSystem"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>اسم النظام</label><input id="${prefix}_sysName" type="text"></div>
+      <div class="field"><label>منذ متى؟</label><input id="${prefix}_sysAge" type="text"></div>
+      <div class="field"><label>جاهز أم مخصص؟</label><select id="${prefix}_sysType"><option value="">اختر...</option><option>جاهز</option><option>مطوّر خصيصاً</option></select></div>
+    </div>
+    <div class="card-title" style="margin-top:16px;">المشاكل المكتشفة</div>
+    <div id="${prefix}_problems"></div>
+    <button class="btn-secondary" onclick="addProblemRow('${prefix}')">+ إضافة مشكلة</button>
+    <div class="card-title" style="margin-top:16px;">الاحتياجات والتقارير</div>
+    <textarea id="${prefix}_needs" rows="2"></textarea>
+    <div class="card-title" style="margin-top:16px;">الموديولات المطلوبة</div>
+    <div class="chips" id="${prefix}_modules">
+      <label class="chip"><input type="checkbox" value="POS"> POS</label>
+      <label class="chip"><input type="checkbox" value="Inventory"> Inventory</label>
+      <label class="chip"><input type="checkbox" value="Purchasing"> Purchasing</label>
+      <label class="chip"><input type="checkbox" value="Tablet Ordering"> Tablet Ordering</label>
+      <label class="chip"><input type="checkbox" value="Accounting"> Accounting</label>
+      <label class="chip"><input type="checkbox" value="Dashboard"> Dashboard</label>
+    </div>
+    <div class="card-title" style="margin-top:16px;">البيانات المالية</div>
+    <div class="grid2">
+      <div class="field"><label>قيمة الصفقة المتوقعة</label><input id="${prefix}_dealValue" type="number" min="0" placeholder="مثال: 50000"></div>
+      <div class="field"><label>العملة</label>
+        <select id="${prefix}_currency"><option value="EGP">جنيه مصري</option><option value="KWD">دينار كويتي</option><option value="OMR">ريال عُماني</option></select>
+      </div>
+      <div class="field"><label>تاريخ الإغلاق المتوقع</label><input id="${prefix}_expectedClose" type="date"></div>
+    </div>
+    <div class="card-title" style="margin-top:16px;">الحضور وصاحب القرار وتوصية الديمو</div>
+    <div class="grid2">
+      <div class="field"><label>مين هيحضر الديمو؟</label><input id="${prefix}_attendees" type="text"></div>
+      <div class="field"><label>مين صاحب القرار؟</label><input id="${prefix}_decision" type="text"></div>
+      <div class="field"><label>الإدارة المالية لازم تحضر؟</label><select id="${prefix}_finance"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>مسؤول التشغيل لازم يحضر؟</label><select id="${prefix}_ops"><option value="">اختر...</option><option>نعم</option><option>لا</option></select></div>
+      <div class="field"><label>تاريخ الديمو المقترح</label><input id="${prefix}_demoDate" type="date"></div>
+      <div class="field"><label>الساعة</label><input id="${prefix}_demoTime" type="time"></div>
+      <div class="field" style="grid-column:span 2;"><label>المكان</label><input id="${prefix}_demoPlace" type="text"></div>
+      <div class="field"><label>تاريخ المتابعة القادمة</label><input id="${prefix}_nextFollowUp" type="date"></div>
+    </div>
+    <div class="card-title" style="margin-top:16px;">جهات اتصال إضافية</div>
+    <div id="${prefix}_contacts"></div>
+    <button class="btn-secondary" onclick="addContactRow('${prefix}_contacts')">+ إضافة جهة اتصال</button>
+  `;
+}
+
+let problemCounters = {};
+function initProblemRows(prefix) { problemCounters[prefix] = 0; addProblemRow(prefix); contactCounters[prefix] = 0; }
+
+let contactCounters = {};
+function addContactRow(containerId, existing) {
+  contactCounters[containerId] = (contactCounters[containerId] || 0) + 1;
+  const rid = containerId + '_c' + contactCounters[containerId];
+  const div = document.createElement('div');
+  div.className = 'contact-row';
+  div.setAttribute('data-id', rid);
+  div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr 28px; gap:6px; margin-bottom:6px;';
+  div.innerHTML = `
+    <input type="text" placeholder="الاسم" id="${rid}_name" value="${escapeHtml((existing && existing.name) || '')}">
+    <input type="text" placeholder="المنصب (صاحب قرار، مالية...)" id="${rid}_role" value="${escapeHtml((existing && existing.role) || '')}">
+    <input type="tel" placeholder="رقم التليفون" id="${rid}_phone" value="${escapeHtml((existing && existing.phone) || '')}">
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:#C0392B;cursor:pointer;">✕</button>
+  `;
+  document.getElementById(containerId).appendChild(div);
+}
+function collectContactsFromDom(containerId) {
+  const rows = document.querySelectorAll('#' + containerId + ' .contact-row');
+  const out = [];
+  rows.forEach(r => {
+    const rid = r.getAttribute('data-id');
+    const name = document.getElementById(rid + '_name').value.trim();
+    const role = document.getElementById(rid + '_role').value.trim();
+    const phone = document.getElementById(rid + '_phone').value.trim();
+    if (name || phone) out.push({ name, role, phone });
+  });
+  return out;
+}
+function addProblemRow(prefix) {
+  problemCounters[prefix] = (problemCounters[prefix] || 0) + 1;
+  const rid = prefix + '_p' + problemCounters[prefix];
+  const div = document.createElement('div');
+  div.className = 'problem-row';
+  div.setAttribute('data-id', rid);
+  div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 90px 28px; gap:6px; margin-bottom:6px;';
+  div.innerHTML = `
+    <input type="text" placeholder="المشكلة" id="${rid}_issue">
+    <input type="text" placeholder="التفاصيل الفنية" id="${rid}_detail">
+    <select id="${rid}_priority"><option value="">الأولوية</option><option>عالية</option><option>متوسطة</option><option>منخفضة</option></select>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:#C0392B;cursor:pointer;">✕</button>
+  `;
+  document.getElementById(prefix + '_problems').appendChild(div);
+}
+
+function collectModulesFrom(prefix) {
+  const boxes = document.querySelectorAll('#' + prefix + '_modules input[type=checkbox]:checked');
+  return Array.from(boxes).map(b => b.value);
+}
+
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+async function submitNewClient() {
+  const errEl = document.getElementById('new-error');
+  const btn = document.getElementById('new-client-save-btn');
+  errEl.style.display = 'none';
+  const name = v('new_name');
+  if (!name) { errEl.textContent = 'اكتب اسم العميل.'; errEl.style.display = 'block'; return; }
+  btn.disabled = true;
+  btn.innerHTML = 'جارِ الحفظ<span class="spinner"></span>';
+  const d = {
+    name, phone: v('new_phone'), country: v('new_country'),
+    activity: v('new_activity'), branches: v('new_branches'), users_count: v('new_users'),
+    warehouse: v('new_warehouse'), warehouse_count: v('new_warehouseCount'), contact: v('new_contact'), visit_date: v('new_date'),
+    lead_source: v('new_leadSource'),
+    has_system: v('new_hasSystem'), sys_name: v('new_sysName'), sys_age: v('new_sysAge'), sys_type: v('new_sysType'),
+    problems: collectProblemsFromDom('new_problems'), needs: v('new_needs'),
+    modules: collectModulesFrom('new'),
+    deal_value: v('new_dealValue'), currency: v('new_currency') || 'EGP', expected_close_date: v('new_expectedClose'),
+    attendees: v('new_attendees'), decision: v('new_decision'), finance: v('new_finance'), ops: v('new_ops'),
+    demo_date: v('new_demoDate'), demo_time: v('new_demoTime'), demo_place: v('new_demoPlace'),
+    next_follow_up_date: v('new_nextFollowUp'),
+    contacts: collectContactsFromDom('new_contacts'),
+    sales_id: currentProfile.id, stage: 'discovery', review_status: 'بانتظار المراجعة',
+  };
+  const { error } = await sb.from('clients').insert(d);
+  if (error) {
+    errEl.textContent = 'خطأ: ' + error.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'حفظ العميل';
+    return;
+  }
+  showToast('تم حفظ العميل بنجاح', 'success');
+  closeModal();
+  await loadClients();
+}
+
+// ---------- Client detail modal ----------
+async function openClientModal(c) {
+  const root = document.getElementById('modal-root');
+  const { data: debriefs } = await sb.from('debriefs').select('*').eq('client_id', c.id).order('created_at', { ascending: false });
+  const { data: activities } = await sb.from('activities').select('*').eq('client_id', c.id).order('activity_date', { ascending: false });
+  const files = await listClientFiles(c.id);
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box">
+      <div class="modal-head"><div class="card-title" style="margin:0;">${escapeHtml(c.name)}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      ${c.phone ? `<div class="hint" style="margin-bottom:10px;">${escapeHtml(c.phone)} ${whatsappLink(c.phone) ? `— <a href="${whatsappLink(c.phone)}" target="_blank" rel="noopener">فتح واتساب</a>` : ''}</div>` : ''}
+      <div class="field" style="margin-bottom:10px;">
+        <label>المرحلة الحالية</label>
+        <select id="stage-select">${STAGES.map(s => `<option value="${s.key}" ${s.key === c.stage ? 'selected' : ''}>${s.label}</option>`).join('')}</select>
+      </div>
+      <div class="grid2" style="margin-bottom:10px;">
+        <div class="field"><label>تاريخ المتابعة القادمة</label><input id="next-follow-up" type="date" value="${c.next_follow_up_date || ''}"></div>
+        <div class="field"><label>سبب الخسارة (لو المرحلة خسارة)</label>
+          <select id="loss-reason">
+            <option value="">غير محدد</option>
+            ${LOSS_REASONS.map(r => `<option ${c.loss_reason === r ? 'selected' : ''}>${r}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <button class="btn-secondary" onclick="updateStage('${c.id}')">تحديث المرحلة</button>
+      <div class="grid2" style="margin-top:14px;">
+        <div class="field"><label>قيمة الصفقة</label><input id="deal-value" type="number" min="0" value="${c.deal_value || ''}"></div>
+        <div class="field"><label>العملة</label>
+          <select id="deal-currency">
+            <option value="EGP" ${c.currency === 'EGP' ? 'selected' : ''}>جنيه مصري</option>
+            <option value="KWD" ${c.currency === 'KWD' ? 'selected' : ''}>دينار كويتي</option>
+            <option value="OMR" ${c.currency === 'OMR' ? 'selected' : ''}>ريال عُماني</option>
+          </select>
+        </div>
+        <div class="field"><label>تاريخ الإغلاق المتوقع</label><input id="deal-close" type="date" value="${c.expected_close_date || ''}"></div>
+        <div class="field"><label>القيمة المرجّحة (حسب المرحلة)</label><input value="${formatMoney(weightedValue(c), c.currency)}" disabled></div>
+        <div class="field"><label>مصدر العميل</label>
+          <select id="deal-leadsource">
+            <option value="">غير محدد</option>
+            ${LEAD_SOURCES.map(s => `<option ${c.lead_source === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="updateFinancials('${c.id}')">حفظ البيانات المالية</button>
+
+      <div class="card-title" style="margin-top:16px;">العقد والتجديد</div>
+      <div class="grid2">
+        <div class="field"><label>تاريخ بداية العقد</label><input id="contract-start" type="date" value="${c.contract_start_date || ''}"></div>
+        <div class="field"><label>تاريخ التجديد القادم</label><input id="renewal-date" type="date" value="${c.renewal_date || ''}"></div>
+        <div class="field"><label>قيمة التجديد السنوي</label><input id="renewal-value" type="number" min="0" value="${c.renewal_value || ''}"></div>
+      </div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="updateRenewal('${c.id}')">حفظ بيانات العقد</button>
+
+      ${c.stage === 'won' ? `
+      <div class="card-title" style="margin-top:16px;">مرحلة التنفيذ</div>
+      <div class="field">
+        <select id="impl-stage">
+          <option value="">لم تبدأ بعد</option>
+          ${IMPLEMENTATION_STAGES.map(s => `<option value="${s}" ${c.implementation_stage === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="updateImplementationStage('${c.id}')">تحديث مرحلة التنفيذ</button>
+      ` : `<div class="hint" style="margin-top:12px;">مرحلة التنفيذ بتظهر بعد ما الصفقة توصل لمرحلة "فوز".</div>`}
+
+      <div class="summary-box" style="margin-top:14px;">${buildClientSummary(c)}</div>
+
+      <div class="card-title" style="margin-top:16px;">جهات اتصال إضافية</div>
+      <div id="contacts-view">${(c.contacts || []).map(ct => `
+        <div class="hint" style="margin-bottom:6px; padding:8px; background:var(--blue-50); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+          <span>${escapeHtml(ct.name)} ${ct.role ? ('— ' + escapeHtml(ct.role)) : ''} ${ct.phone ? ('— ' + escapeHtml(ct.phone)) : ''}</span>
+          ${whatsappLink(ct.phone) ? `<a href="${whatsappLink(ct.phone)}" target="_blank" rel="noopener">واتساب</a>` : ''}
+        </div>`).join('') || '<div class="hint">لا يوجد جهات اتصال إضافية</div>'}
+      </div>
+      <div id="new-contacts-${c.id}"></div>
+      <button class="btn-secondary" onclick="addContactRow('new-contacts-${c.id}')">+ إضافة جهة اتصال</button>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="saveContacts('${c.id}')">حفظ جهات الاتصال</button>
+
+      <div class="card-title" style="margin-top:16px;">المرفقات</div>
+      <div id="files-list">${files.length === 0 ? '<div class="hint">لا يوجد مرفقات بعد</div>' : ''}</div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+        <input type="file" id="file-input-${c.id}" style="flex:1;">
+        <button class="btn-secondary" onclick="uploadFile('${c.id}')">رفع</button>
+      </div>
+
+      <div class="card-title" style="margin-top:16px;">Debrief</div>
+      <div id="debrief-list">${(debriefs || []).map(db => `
+        <div class="hint" style="margin-bottom:8px; padding:8px; background:var(--blue-50); border-radius:8px;">
+          ${new Date(db.created_at).toLocaleDateString('ar-EG')}<br>
+          إيجابيات: ${escapeHtml(db.went_well || '-')}<br>اعتراضات: ${escapeHtml(db.objections || '-')}<br>الخطوة التالية: ${escapeHtml(db.next_step || '-')}
+        </div>`).join('') || '<div class="hint">لا يوجد Debrief بعد</div>'}
+      </div>
+      <div class="field"><label>إيجابيات الديمو</label><input id="db_well" type="text"></div>
+      <div class="field"><label>اعتراضات</label><input id="db_obj" type="text"></div>
+      <div class="field"><label>الخطوة التالية</label><input id="db_next" type="text"></div>
+      <button class="btn-secondary" style="margin-top:8px;" onclick="addDebrief('${c.id}')">إضافة Debrief</button>
+
+      <div class="card-title" style="margin-top:16px;">سجل النشاط (زيارات ومكالمات)</div>
+      <div id="activity-list">${(activities || []).map(a => `
+        <div class="hint" style="margin-bottom:6px; padding:8px; background:var(--blue-50); border-radius:8px;">
+          ${a.activity_date} — ${escapeHtml(a.activity_type)}${a.notes ? (' — ' + escapeHtml(a.notes)) : ''}
+        </div>`).join('') || '<div class="hint">لا يوجد نشاط مسجّل بعد</div>'}
+      </div>
+      <div class="grid2" style="margin-top:8px;">
+        <div class="field"><label>نوع النشاط</label>
+          <select id="act-type"><option>زيارة</option><option>مكالمة</option><option>متابعة</option></select>
+        </div>
+        <div class="field"><label>التاريخ</label><input id="act-date" type="date"></div>
+      </div>
+      <input id="act-notes" type="text" placeholder="ملاحظة سريعة (اختياري)" style="margin-top:8px;">
+      <button class="btn-secondary" style="margin-top:8px;" onclick="logActivity('${c.id}')">تسجيل النشاط</button>
+
+      <div style="margin-top:10px;"><a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">عرض تقرير Go-Live</a></div>
+    </div>
+  </div>`;
+  renderFilesList(c.id, files);
+}
+
+async function renderFilesList(clientId, files) {
+  const listEl = document.getElementById('files-list');
+  if (!listEl || files.length === 0) return;
+  const canDelete = currentProfile.role === 'admin' || currentProfile.role === 'support';
+  const rows = await Promise.all(files.map(async (f) => {
+    const url = await getClientFileUrl(clientId, f.name);
+    return `
+      <div class="hint" style="margin-bottom:6px; padding:8px; background:var(--blue-50); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+        <a href="${url || '#'}" target="_blank" rel="noopener">${escapeHtml(f.name.replace(/^\d+_/, ''))}</a>
+        ${canDelete ? `<button data-del-file="${escapeHtml(f.name)}" style="border:none;background:transparent;color:#C0392B;cursor:pointer;">حذف</button>` : ''}
+      </div>`;
+  }));
+  listEl.innerHTML = rows.join('');
+  listEl.querySelectorAll('[data-del-file]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await deleteClientFile(clientId, btn.getAttribute('data-del-file'));
+      const c = allClients.find(x => x.id === clientId);
+      openClientModal(c);
+    });
+  });
+}
+
+async function uploadFile(clientId) {
+  const input = document.getElementById('file-input-' + clientId);
+  if (!input.files || input.files.length === 0) { showToast('اختار ملف الأول', 'error'); return; }
+  try {
+    await uploadClientFile(clientId, input.files[0]);
+    showToast('تم رفع الملف', 'success');
+    const c = allClients.find(x => x.id === clientId);
+    openClientModal(c);
+  } catch (e) {
+    showToast('تعذر رفع الملف: ' + e.message, 'error');
+  }
+}
+
+async function saveContacts(clientId) {
+  const c = allClients.find(x => x.id === clientId);
+  const existing = c.contacts || [];
+  const added = collectContactsFromDom('new-contacts-' + clientId);
+  const contacts = existing.concat(added);
+  await sb.from('clients').update({ contacts }).eq('id', clientId);
+  showToast('تم حفظ جهات الاتصال', 'success');
+  await loadClients();
+  const updated = allClients.find(x => x.id === clientId);
+  openClientModal(updated);
+}
+
+async function updateStage(clientId) {
+  const stage = document.getElementById('stage-select').value;
+  const next_follow_up_date = document.getElementById('next-follow-up').value;
+  const loss_reason = document.getElementById('loss-reason').value || null;
+  await sb.from('clients').update({ stage, next_follow_up_date, loss_reason }).eq('id', clientId);
+  showToast('تم تحديث المرحلة', 'success');
+  closeModal();
+  await loadClients();
+}
+
+async function updateFinancials(clientId) {
+  const d = {
+    deal_value: document.getElementById('deal-value').value || 0,
+    currency: document.getElementById('deal-currency').value,
+    expected_close_date: document.getElementById('deal-close').value,
+    lead_source: document.getElementById('deal-leadsource').value || null,
+  };
+  await sb.from('clients').update(d).eq('id', clientId);
+  showToast('تم حفظ البيانات المالية', 'success');
+  closeModal();
+  await loadClients();
+}
+
+async function updateRenewal(clientId) {
+  const d = {
+    contract_start_date: document.getElementById('contract-start').value,
+    renewal_date: document.getElementById('renewal-date').value,
+    renewal_value: document.getElementById('renewal-value').value || 0,
+  };
+  await sb.from('clients').update(d).eq('id', clientId);
+  showToast('تم حفظ بيانات العقد', 'success');
+  closeModal();
+  await loadClients();
+}
+
+async function updateImplementationStage(clientId) {
+  const stage = document.getElementById('impl-stage').value || null;
+  await sb.from('clients').update({ implementation_stage: stage }).eq('id', clientId);
+  showToast('تم تحديث مرحلة التنفيذ', 'success');
+  closeModal();
+  await loadClients();
+}
+
+async function addDebrief(clientId) {
+  const d = { client_id: clientId, created_by: currentProfile.id, went_well: v('db_well'), objections: v('db_obj'), next_step: v('db_next') };
+  await sb.from('debriefs').insert(d);
+  showToast('تمت إضافة الـ Debrief', 'success');
+  const c = allClients.find(x => x.id === clientId);
+  openClientModal(c);
+}
+
+async function logActivity(clientId) {
+  const d = {
+    client_id: clientId,
+    sales_id: currentProfile.id,
+    activity_type: document.getElementById('act-type').value,
+    activity_date: document.getElementById('act-date').value || new Date().toISOString().slice(0, 10),
+    notes: document.getElementById('act-notes').value.trim(),
+  };
+  await sb.from('activities').insert(d);
+  showToast('تم تسجيل النشاط', 'success');
+  const c = allClients.find(x => x.id === clientId);
+  openClientModal(c);
+}
+
+function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+</script>
+</body>
+</html>
