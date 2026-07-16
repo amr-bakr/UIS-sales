@@ -114,6 +114,8 @@
     body * { visibility:hidden; }
     #print-view, #print-view * { visibility:visible; }
     #print-view { display:block !important; position:absolute; top:0; right:0; left:0; padding:20px; }
+    #print-view h2, #print-view h3 { page-break-after:avoid; }
+    #print-view table, #print-view .stat-card, #print-view .card { page-break-inside:avoid; }
   }
 </style>
 
@@ -152,7 +154,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v17-design';
+const APP_BUILD_VERSION = 'v18';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -411,11 +413,38 @@ function renderSidebar(activeKey, profile) {
 function logoutIcon() { return ICONS.logout; }
 
 // ---------- رابط واتساب سريع ----------
-function whatsappLink(phone) {
+const COUNTRY_DIAL_CODES = { 'مصر': '20', 'الكويت': '965', 'عُمان': '968' };
+
+function whatsappLink(phone, country) {
   if (!phone) return null;
-  const digits = phone.replace(/[^\d]/g, '');
+  const raw = phone.trim();
+  let digits = raw.replace(/[^\d]/g, '');
   if (!digits) return null;
+
+  // الرقم مكتوب بمفتاح دولة صريح (+20، +965...) — يكفي نشيل الرموز بس
+  if (raw.startsWith('+')) {
+    return 'https://wa.me/' + digits;
+  }
+
+  // الرقم محلي (بيبدأ بصفر) — نضيف مفتاح الدولة بناءً على دولة العميل
+  if (raw.startsWith('0')) {
+    const code = COUNTRY_DIAL_CODES[country];
+    if (code) {
+      digits = code + digits.replace(/^0+/, '');
+      return 'https://wa.me/' + digits;
+    }
+  }
+
+  // مش عارفين الدولة، نستخدم الأرقام زي ما هي (أفضل من مفيش رابط خالص)
   return 'https://wa.me/' + digits;
+}
+
+// ---------- طباعة/تصدير PDF دايمًا بالوضع النهاري (حتى لو الوضع الليلي مفعّل) ----------
+function printInLightMode() {
+  const wasDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (wasDark) document.documentElement.removeAttribute('data-theme');
+  window.print();
+  if (wasDark) document.documentElement.setAttribute('data-theme', 'dark');
 }
 
 // ---------- أسباب الخسارة ----------
@@ -773,23 +802,41 @@ function exportPdf() {
   const to = document.getElementById('date-to').value || 'الآن';
   const statsHtml = document.getElementById('stats').innerHTML;
   const financeHtml = document.getElementById('finance-stats').innerHTML;
-  const chartImg = document.getElementById('stageChart').toDataURL('image/png');
-  const targetChartImg = document.getElementById('targetChart').toDataURL('image/png');
-  const tableHtml = document.getElementById('salesTable').outerHTML;
+
+  // نتأكد إن الرسوم البيانية بحجمها الصحيح حتى لو كانت جوه تاب مخفي
+  if (chartInstance) chartInstance.resize();
+  if (targetChartInstance) targetChartInstance.resize();
+  const chartImg = chartInstance ? document.getElementById('stageChart').toDataURL('image/png') : null;
+  const targetChartImg = targetChartInstance ? document.getElementById('targetChart').toDataURL('image/png') : null;
+
+  const leadSourceHtml = document.getElementById('leadSourceTable').outerHTML;
+  const activityHtml = document.getElementById('activityTable').outerHTML;
+  const implHtml = document.getElementById('implTable').outerHTML;
+  const renewalHtml = document.getElementById('renewalTable').outerHTML;
+  const salesHtml = document.getElementById('salesTable').outerHTML;
+
   document.getElementById('print-view').innerHTML = `
     <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
-      <h2 style="color:#0B2C52;">تقرير الإدارة — من ${from} إلى ${to}</h2>
+      <h2 style="color:#0B2C52;">تقرير الإدارة — من ${escapeHtml(from)} إلى ${escapeHtml(to)}</h2>
+      <h3>نظرة عامة</h3>
       <div style="display:flex; flex-wrap:wrap; gap:10px;">${statsHtml}</div>
-      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${financeHtml}</div>
-      <h3>توزيع العملاء حسب المرحلة</h3>
-      <img src="${chartImg}" style="max-width:100%;">
-      <h3>التارجت مقابل الفعلي</h3>
-      <img src="${targetChartImg}" style="max-width:100%;">
+      ${chartImg ? `<img src="${chartImg}" style="max-width:100%; margin-top:10px;">` : ''}
+      <h3>الماليات والتوقعات</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:10px;">${financeHtml}</div>
+      ${targetChartImg ? `<img src="${targetChartImg}" style="max-width:100%; margin-top:10px;">` : ''}
+      <h3>مراحل التنفيذ الحالية</h3>
+      ${implHtml}
+      <h3>عقود قريبة من التجديد</h3>
+      ${renewalHtml}
+      <h3>أداء مصادر العملاء</h3>
+      ${leadSourceHtml}
+      <h3>نشاط الفريق</h3>
+      ${activityHtml}
       <h3>أداء كل سيلز</h3>
-      ${tableHtml}
+      ${salesHtml}
     </div>
   `;
-  window.print();
+  printInLightMode();
 }
 </script>
 </body>

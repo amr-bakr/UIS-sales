@@ -32,7 +32,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v17-design';
+const APP_BUILD_VERSION = 'v18';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -291,11 +291,38 @@ function renderSidebar(activeKey, profile) {
 function logoutIcon() { return ICONS.logout; }
 
 // ---------- رابط واتساب سريع ----------
-function whatsappLink(phone) {
+const COUNTRY_DIAL_CODES = { 'مصر': '20', 'الكويت': '965', 'عُمان': '968' };
+
+function whatsappLink(phone, country) {
   if (!phone) return null;
-  const digits = phone.replace(/[^\d]/g, '');
+  const raw = phone.trim();
+  let digits = raw.replace(/[^\d]/g, '');
   if (!digits) return null;
+
+  // الرقم مكتوب بمفتاح دولة صريح (+20، +965...) — يكفي نشيل الرموز بس
+  if (raw.startsWith('+')) {
+    return 'https://wa.me/' + digits;
+  }
+
+  // الرقم محلي (بيبدأ بصفر) — نضيف مفتاح الدولة بناءً على دولة العميل
+  if (raw.startsWith('0')) {
+    const code = COUNTRY_DIAL_CODES[country];
+    if (code) {
+      digits = code + digits.replace(/^0+/, '');
+      return 'https://wa.me/' + digits;
+    }
+  }
+
+  // مش عارفين الدولة، نستخدم الأرقام زي ما هي (أفضل من مفيش رابط خالص)
   return 'https://wa.me/' + digits;
+}
+
+// ---------- طباعة/تصدير PDF دايمًا بالوضع النهاري (حتى لو الوضع الليلي مفعّل) ----------
+function printInLightMode() {
+  const wasDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (wasDark) document.documentElement.removeAttribute('data-theme');
+  window.print();
+  if (wasDark) document.documentElement.setAttribute('data-theme', 'dark');
 }
 
 // ---------- أسباب الخسارة ----------

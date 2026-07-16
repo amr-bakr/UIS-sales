@@ -37,6 +37,17 @@
 </div>
 </div>
 
+<div id="print-view" style="display:none;"></div>
+<style>
+  @media print {
+    body * { visibility:hidden; }
+    #print-view, #print-view * { visibility:visible; }
+    #print-view { display:block !important; position:absolute; top:0; right:0; left:0; padding:20px; }
+    #print-view h2, #print-view h3 { page-break-after:avoid; }
+    #print-view table, #print-view .stat-card, #print-view .card { page-break-inside:avoid; }
+  }
+</style>
+
 <script defer>
 // ============================================================
 // الوضع الليلي (Dark Mode) — بيتطبق فورًا في كل صفحة قبل أي حاجة تانية
@@ -72,7 +83,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v17-design';
+const APP_BUILD_VERSION = 'v18';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -331,11 +342,38 @@ function renderSidebar(activeKey, profile) {
 function logoutIcon() { return ICONS.logout; }
 
 // ---------- رابط واتساب سريع ----------
-function whatsappLink(phone) {
+const COUNTRY_DIAL_CODES = { 'مصر': '20', 'الكويت': '965', 'عُمان': '968' };
+
+function whatsappLink(phone, country) {
   if (!phone) return null;
-  const digits = phone.replace(/[^\d]/g, '');
+  const raw = phone.trim();
+  let digits = raw.replace(/[^\d]/g, '');
   if (!digits) return null;
+
+  // الرقم مكتوب بمفتاح دولة صريح (+20، +965...) — يكفي نشيل الرموز بس
+  if (raw.startsWith('+')) {
+    return 'https://wa.me/' + digits;
+  }
+
+  // الرقم محلي (بيبدأ بصفر) — نضيف مفتاح الدولة بناءً على دولة العميل
+  if (raw.startsWith('0')) {
+    const code = COUNTRY_DIAL_CODES[country];
+    if (code) {
+      digits = code + digits.replace(/^0+/, '');
+      return 'https://wa.me/' + digits;
+    }
+  }
+
+  // مش عارفين الدولة، نستخدم الأرقام زي ما هي (أفضل من مفيش رابط خالص)
   return 'https://wa.me/' + digits;
+}
+
+// ---------- طباعة/تصدير PDF دايمًا بالوضع النهاري (حتى لو الوضع الليلي مفعّل) ----------
+function printInLightMode() {
+  const wasDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (wasDark) document.documentElement.removeAttribute('data-theme');
+  window.print();
+  if (wasDark) document.documentElement.setAttribute('data-theme', 'dark');
 }
 
 // ---------- أسباب الخسارة ----------
@@ -685,7 +723,7 @@ async function openClientModal(c) {
   <div class="modal-overlay" style="position:fixed;">
     <div class="modal-box">
       <div class="modal-head"><div class="card-title" style="margin:0;">${escapeHtml(c.name)}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-      ${c.phone ? `<div class="hint" style="margin-bottom:10px;">${escapeHtml(c.phone)} ${whatsappLink(c.phone) ? `— <a href="${whatsappLink(c.phone)}" target="_blank" rel="noopener">فتح واتساب</a>` : ''}</div>` : ''}
+      ${c.phone ? `<div class="hint" style="margin-bottom:10px;">${escapeHtml(c.phone)} ${whatsappLink(c.phone, c.country) ? `— <a href="${whatsappLink(c.phone, c.country)}" target="_blank" rel="noopener">فتح واتساب</a>` : ''}</div>` : ''}
       <div class="field" style="margin-bottom:10px;">
         <label>المرحلة الحالية</label>
         <select id="stage-select">${STAGES.map(s => `<option value="${s.key}" ${s.key === c.stage ? 'selected' : ''}>${s.label}</option>`).join('')}</select>
@@ -745,7 +783,7 @@ async function openClientModal(c) {
       <div id="contacts-view">${(c.contacts || []).map(ct => `
         <div class="hint" style="margin-bottom:6px; padding:8px; background:var(--blue-50); border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
           <span>${escapeHtml(ct.name)} ${ct.role ? ('— ' + escapeHtml(ct.role)) : ''} ${ct.phone ? ('— ' + escapeHtml(ct.phone)) : ''}</span>
-          ${whatsappLink(ct.phone) ? `<a href="${whatsappLink(ct.phone)}" target="_blank" rel="noopener">واتساب</a>` : ''}
+          ${whatsappLink(ct.phone, c.country) ? `<a href="${whatsappLink(ct.phone, c.country)}" target="_blank" rel="noopener">واتساب</a>` : ''}
         </div>`).join('') || '<div class="hint">لا يوجد جهات اتصال إضافية</div>'}
       </div>
       <div id="new-contacts-${c.id}"></div>
@@ -786,10 +824,62 @@ async function openClientModal(c) {
       <input id="act-notes" type="text" placeholder="ملاحظة سريعة (اختياري)" style="margin-top:8px;">
       <button class="btn-secondary" style="margin-top:8px;" onclick="logActivity('${c.id}')">تسجيل النشاط</button>
 
-      <div style="margin-top:10px;"><a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">عرض تقرير Go-Live</a></div>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">عرض تقرير Go-Live</a>
+        <button class="btn-secondary" onclick='exportClientPdf(${JSON.stringify(c.id)})'>تصدير بيانات العميل PDF</button>
+      </div>
     </div>
   </div>`;
   renderFilesList(c.id, files);
+}
+
+async function exportClientPdf(clientId) {
+  const c = allClients.find(x => x.id === clientId);
+  if (!c) { showToast('تعذر إيجاد بيانات العميل', 'error'); return; }
+
+  const [{ data: debriefs }, { data: activities }] = await Promise.all([
+    sb.from('debriefs').select('*').eq('client_id', clientId).order('created_at', { ascending: false }),
+    sb.from('activities').select('*').eq('client_id', clientId).order('activity_date', { ascending: false }),
+  ]);
+  const files = await listClientFiles(clientId);
+
+  const summaryHtml = escapeHtml(buildClientSummary(c)).split('\n').join('<br>');
+
+  const debriefsHtml = (debriefs || []).map(db => `
+    <div style="margin-bottom:8px;">
+      <b>${new Date(db.created_at).toLocaleDateString('ar-EG')}</b> —
+      إيجابيات: ${escapeHtml(db.went_well || '-')} | اعتراضات: ${escapeHtml(db.objections || '-')} | الخطوة التالية: ${escapeHtml(db.next_step || '-')}
+    </div>`).join('') || '<div>لا يوجد Debrief مسجّل</div>';
+
+  const activitiesHtml = (activities || []).map(a =>
+    `<div>${a.activity_date} — ${escapeHtml(a.activity_type)}${a.notes ? (' — ' + escapeHtml(a.notes)) : ''}</div>`
+  ).join('') || '<div>لا يوجد نشاط مسجّل</div>';
+
+  const filesHtml = (files || []).length
+    ? files.map(f => `<div>${escapeHtml(f.name.replace(/^\d+_/, ''))}</div>`).join('')
+    : '<div>لا يوجد مرفقات</div>';
+
+  const implRow = c.stage === 'won'
+    ? `<p><b>مرحلة التنفيذ:</b> ${escapeHtml(c.implementation_stage || 'لم تبدأ بعد')}</p>`
+    : '';
+
+  document.getElementById('print-view').innerHTML = `
+    <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
+      <h2 style="color:#0B2C52;">بيانات العميل: ${escapeHtml(c.name)}</h2>
+      <p><b>المرحلة الحالية:</b> ${escapeHtml(stageLabel(c.stage))} | <b>حالة المراجعة:</b> ${escapeHtml(c.review_status)}</p>
+      ${implRow}
+      <h3>ملخص بيانات الاكتشاف</h3>
+      <p>${summaryHtml}</p>
+      <h3>سجل النشاط</h3>
+      ${activitiesHtml}
+      <h3>سجل الـ Debrief</h3>
+      ${debriefsHtml}
+      <h3>المرفقات</h3>
+      ${filesHtml}
+      <p style="margin-top:20px; color:#888; font-size:11px;">تم التصدير بتاريخ ${new Date().toLocaleDateString('ar-EG')}</p>
+    </div>
+  `;
+  printInLightMode();
 }
 
 async function renderFilesList(clientId, files) {
