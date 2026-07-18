@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نظام إدارة العملاء — السيلز</title>
+<title>نظام إدارة العملاء — العملاء</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://lndacyhcjrpybbsjwupw.supabase.co">
@@ -11,8 +11,7 @@
 <link rel="preconnect" href="https://unpkg.com">
 <link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-
-<link rel="stylesheet" href="assets/styles.css?v=17">
+<link rel="stylesheet" href="assets/styles.css?v=19">
 </head>
 <body>
 <div class="app-shell">
@@ -21,32 +20,51 @@
 <div class="wrap" style="position:relative;">
   <div class="topbar">
     <div>
-      <div class="brand-title">عملائي</div>
+      <div class="brand-title">العملاء</div>
       <div class="brand-sub" id="who">...</div>
     </div>
     <div class="nav-links">
-      <a href="clients.html" class="btn-primary" style="text-decoration:none;">+ عميل جديد</a>
-      <button class="btn-logout" onclick="logout()"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg> خروج</button>
+      <button class="btn-primary" onclick="openNewClientModal()">+ عميل جديد</button>
+      <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>
 
-  <div class="kanban" id="kanban"><div class="empty-state"><span class="spinner"></span> جارِ تحميل العملاء...</div></div>
+  <div class="card">
+    <div class="grid2" id="filters-grid">
+      <div class="field"><label>بحث بالاسم أو رقم التليفون</label><input id="search-input" type="text" placeholder="اكتب حرفين على الأقل..." oninput="applyFilters()"></div>
+      <div class="field"><label>المرحلة</label>
+        <select id="filter-stage" onchange="applyFilters()">
+          <option value="">كل المراحل</option>
+        </select>
+      </div>
+      <div class="field"><label>الدولة</label>
+        <select id="filter-country" onchange="applyFilters()">
+          <option value="">كل الدول</option>
+          <option value="مصر">مصر</option>
+          <option value="الكويت">الكويت</option>
+          <option value="عُمان">عُمان</option>
+        </select>
+      </div>
+      <div class="field" id="sales-filter-field" style="display:none;">
+        <label>السيلز</label>
+        <select id="filter-sales" onchange="applyFilters()"><option value="">كل السيلز</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table class="data-table" id="clientsTable">
+      <thead><tr>
+        <th>اسم العميل</th><th>رقم التواصل</th><th>المرحلة</th><th id="sales-col-header" style="display:none;">السيلز</th><th>الدولة</th><th>حالة المراجعة</th><th>قيمة الصفقة</th>
+      </tr></thead>
+      <tbody><tr><td colspan="7" class="hint"><span class="spinner"></span> جارِ تحميل العملاء...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+</div>
 </div>
 
 <div id="modal-root"></div>
-</div>
-</div>
-
-<div id="print-view" style="display:none;"></div>
-<style>
-  @media print {
-    body * { visibility:hidden; }
-    #print-view, #print-view * { visibility:visible; }
-    #print-view { display:block !important; position:absolute; top:0; right:0; left:0; padding:20px; }
-    #print-view h2, #print-view h3 { page-break-after:avoid; }
-    #print-view table, #print-view .stat-card, #print-view .card { page-break-inside:avoid; }
-  }
-</style>
 
 <script defer>
 // ============================================================
@@ -512,57 +530,347 @@ function collectProblemsFromDom(containerId) {
 <script defer>
 let currentProfile = null;
 let allClients = [];
+let profilesById = {};
 
 (async function init() {
-  currentProfile = await requireRole(['sales', 'admin', 'support']);
+  currentProfile = await requireRole(['admin', 'sales', 'support']);
   if (!currentProfile) return;
-  renderSidebar('pipeline', currentProfile);
-  document.getElementById('who').textContent = (currentProfile.full_name || 'سيلز');
+  renderSidebar('clients', currentProfile);
+  document.getElementById('who').textContent = (currentProfile.full_name || '-');
   await loadAppSettings();
+
+  document.getElementById('filter-stage').innerHTML += STAGES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+
+  if (currentProfile.role === 'admin' || currentProfile.role === 'support') {
+    document.getElementById('sales-filter-field').style.display = 'flex';
+    document.getElementById('sales-col-header').style.display = '';
+    const { data: profiles } = await sb.from('profiles').select('*');
+    (profiles || []).forEach(p => profilesById[p.id] = p);
+    const salesSelect = document.getElementById('filter-sales');
+    salesSelect.innerHTML += (profiles || []).filter(p => p.role === 'sales')
+      .map(p => `<option value="${p.id}">${escapeHtml(p.full_name || p.email || '-')}</option>`).join('');
+  }
+
   await loadClients();
 })();
 
 async function loadClients() {
-  const { data, error } = await sb.from('clients').select('*').eq('sales_id', currentProfile.id).order('created_at', { ascending: false });
+  const { data, error } = await sb.from('clients').select('*').order('created_at', { ascending: false });
   if (error) { showToast('خطأ في تحميل العملاء: ' + error.message, 'error'); return; }
   allClients = data || [];
-  renderKanban();
+  applyFilters();
 }
 
-function renderKanban() {
-  const el = document.getElementById('kanban');
-  el.innerHTML = '';
-  STAGES.forEach(stage => {
-    const col = document.createElement('div');
-    col.className = 'kanban-col';
-    col.style.borderTop = `3px solid ${STAGE_COLORS[stage.key] || 'var(--blue-500)'}`;
-    const items = allClients.filter(c => c.stage === stage.key);
-    col.innerHTML = `<div class="kanban-col-title"><span>${stage.label}</span><span>${items.length}</span></div>`;
-    if (items.length === 0) {
-      col.innerHTML += '<div class="hint" style="text-align:center; padding:16px 4px;">لا يوجد عملاء هنا</div>';
+function applyFilters() {
+  const search = document.getElementById('search-input').value.trim().toLowerCase();
+  const stage = document.getElementById('filter-stage').value;
+  const country = document.getElementById('filter-country').value;
+  const salesId = document.getElementById('filter-sales') ? document.getElementById('filter-sales').value : '';
+
+  const filtered = allClients.filter(c => {
+    if (search) {
+      const name = (c.name || '').toLowerCase();
+      const phone = (c.phone || '').toLowerCase();
+      if (!name.includes(search) && !phone.includes(search)) return false;
     }
-    items.forEach(c => {
-      const card = document.createElement('div');
-      card.className = 'kanban-card';
-      card.onclick = () => openClientModal(c);
-      const isOverdue = c.next_follow_up_date && c.next_follow_up_date < new Date().toISOString().slice(0, 10) && c.stage !== 'won' && c.stage !== 'lost';
-      card.innerHTML = `
-        <div class="kanban-card-name">${escapeHtml(c.name || '-')}</div>
-        <div class="kanban-card-meta">${escapeHtml(c.phone || '')}</div>
-        <div class="kanban-card-meta">${c.deal_value ? formatMoney(c.deal_value, c.currency) : ''}</div>
-        <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
-          <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${escapeHtml(c.review_status)}</span>
-          ${c.stage === 'won' && c.implementation_stage ? `<span class="badge-pill ${implementationBadgeClass(c.implementation_stage)}">${escapeHtml(c.implementation_stage)}</span>` : ''}
-          ${isOverdue ? '<span class="badge-pill badge-needs">متابعة متأخرة</span>' : ''}
-        </div>
-      `;
-      col.appendChild(card);
+    if (stage && c.stage !== stage) return false;
+    if (country && c.country !== country) return false;
+    if (salesId && c.sales_id !== salesId) return false;
+    return true;
+  });
+
+  renderTable(filtered);
+}
+
+function renderTable(items) {
+  const tbody = document.querySelector('#clientsTable tbody');
+  const showSalesCol = currentProfile.role === 'admin' || currentProfile.role === 'support';
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="hint" style="text-align:center; padding:24px;">مفيش عملاء مطابقين لبحثك</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(c => {
+    const salesName = showSalesCol ? escapeHtml((profilesById[c.sales_id] && (profilesById[c.sales_id].full_name || profilesById[c.sales_id].email)) || '-') : '';
+    return `
+    <tr style="cursor:pointer;" data-client-id="${c.id}">
+      <td>${escapeHtml(c.name || '-')}</td>
+      <td>${escapeHtml(c.phone || '-')}</td>
+      <td><span class="badge-pill badge-stage">${escapeHtml(stageLabel(c.stage))}</span></td>
+      ${showSalesCol ? `<td>${salesName}</td>` : ''}
+      <td>${escapeHtml(c.country || '-')}</td>
+      <td><span class="badge-pill ${reviewBadgeClass(c.review_status)}">${escapeHtml(c.review_status)}</span></td>
+      <td>${c.deal_value ? formatMoney(c.deal_value, c.currency) : '-'}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('tr[data-client-id]').forEach(row => {
+    row.addEventListener('click', () => {
+      const c = allClients.find(x => x.id === row.getAttribute('data-client-id'));
+      if (c) openClientModal(c);
     });
-    el.appendChild(col);
   });
 }
 
-// ---------- جهات اتصال إضافية (مستخدمة داخل تفاصيل العميل) ----------
+// ============================================================
+// نموذج عميل جديد — خطوات ديناميكية بدل فورم طويل واحد
+// ============================================================
+let wizardStep = 1;
+const WIZARD_TOTAL_STEPS = 4;
+const WIZARD_TITLES = ['بيانات العميل الأساسية', 'النظام الحالي والمشاكل', 'الاحتياجات والموديولات والمالية', 'الحضور وجهات الاتصال'];
+let newClientData = {};
+let wProblemCount = 0;
+
+function openNewClientModal() {
+  newClientData = {};
+  wizardStep = 1;
+  wProblemCount = 0;
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="modal-overlay" style="position:fixed;">
+    <div class="modal-box">
+      <div class="modal-head"><div class="card-title" style="margin:0;">عميل جديد</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="hint" id="wizard-step-label" style="margin-bottom:14px; font-weight:700; color:var(--blue-700);"></div>
+      <div id="wizard-content"></div>
+      <div id="new-error" class="error-box" style="display:none;"></div>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="btn-secondary" id="wizard-back-btn" onclick="wizardBack()">السابق</button>
+        <button class="btn-primary" id="wizard-next-btn" style="flex:1;" onclick="wizardNext()">التالي</button>
+      </div>
+    </div>
+  </div>`;
+  renderWizardStep();
+}
+
+function renderWizardStep() {
+  document.getElementById('wizard-step-label').textContent = `الخطوة ${wizardStep} من ${WIZARD_TOTAL_STEPS} — ${WIZARD_TITLES[wizardStep - 1]}`;
+  document.getElementById('wizard-back-btn').style.display = wizardStep === 1 ? 'none' : 'inline-block';
+  document.getElementById('wizard-next-btn').textContent = wizardStep === WIZARD_TOTAL_STEPS ? 'حفظ العميل' : 'التالي';
+  document.getElementById('new-error').style.display = 'none';
+
+  const content = document.getElementById('wizard-content');
+  if (wizardStep === 1) {
+    content.innerHTML = `
+      <div class="grid2">
+        <div class="field"><label>اسم الشركة / العميل <span class="req">*</span></label><input id="w_name" type="text" value="${escapeHtml(newClientData.name || '')}"></div>
+        <div class="field"><label>رقم التواصل مع العميل</label><input id="w_phone" type="tel" value="${escapeHtml(newClientData.phone || '')}"></div>
+        <div class="field"><label>الدولة</label>
+          <select id="w_country">
+            <option value="">اختر...</option>
+            <option ${newClientData.country === 'مصر' ? 'selected' : ''}>مصر</option>
+            <option ${newClientData.country === 'الكويت' ? 'selected' : ''}>الكويت</option>
+            <option ${newClientData.country === 'عُمان' ? 'selected' : ''}>عُمان</option>
+          </select>
+        </div>
+        <div class="field"><label>النشاط</label>
+          <select id="w_activity">
+            <option value="">اختر...</option>
+            <option ${newClientData.activity === 'مطعم فرع واحد' ? 'selected' : ''}>مطعم فرع واحد</option>
+            <option ${newClientData.activity === 'سلسلة مطاعم' ? 'selected' : ''}>سلسلة مطاعم</option>
+            <option ${newClientData.activity === 'كافيه' ? 'selected' : ''}>كافيه</option>
+            <option ${newClientData.activity === 'أخرى' ? 'selected' : ''}>أخرى</option>
+          </select>
+        </div>
+        <div class="field"><label>عدد الفروع</label><input id="w_branches" type="number" value="${escapeHtml(newClientData.branches || '')}"></div>
+        <div class="field"><label>عدد المستخدمين</label><input id="w_users" type="number" value="${escapeHtml(newClientData.users || '')}"></div>
+        <div class="field"><label>يوجد مطبخ / مصنع مركزي؟</label>
+          <select id="w_warehouse"><option value="">اختر...</option><option ${newClientData.warehouse === 'نعم' ? 'selected' : ''}>نعم</option><option ${newClientData.warehouse === 'لا' ? 'selected' : ''}>لا</option></select>
+        </div>
+        <div class="field"><label>عدد المخازن</label><input id="w_warehouseCount" type="number" value="${escapeHtml(newClientData.warehouseCount || '')}"></div>
+        <div class="field"><label>اسم المسؤول ومنصبه</label><input id="w_contact" type="text" value="${escapeHtml(newClientData.contact || '')}"></div>
+        <div class="field"><label>تاريخ الزيارة</label><input id="w_date" type="date" value="${escapeHtml(newClientData.date || '')}"></div>
+        <div class="field"><label>مصدر العميل</label>
+          <select id="w_leadSource"><option value="">اختر...</option>${LEAD_SOURCES.map(s => `<option ${newClientData.leadSource === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        </div>
+        ${currentProfile.role !== 'sales' ? `
+        <div class="field"><label>السيلز المسؤول <span class="req">*</span></label>
+          <select id="w_salesId">
+            <option value="">اختر السيلز...</option>
+            ${Object.values(profilesById).filter(p => p.role === 'sales').map(p => `<option value="${p.id}" ${newClientData.salesId === p.id ? 'selected' : ''}>${escapeHtml(p.full_name || p.email || '-')}</option>`).join('')}
+          </select>
+        </div>` : ''}
+      </div>`;
+  } else if (wizardStep === 2) {
+    content.innerHTML = `
+      <div class="grid2">
+        <div class="field"><label>يعملون على نظام حالياً؟</label>
+          <select id="w_hasSystem" onchange="toggleWizardSystemFields()">
+            <option value="">اختر...</option>
+            <option ${newClientData.hasSystem === 'نعم' ? 'selected' : ''}>نعم</option>
+            <option ${newClientData.hasSystem === 'لا' ? 'selected' : ''}>لا</option>
+          </select>
+        </div>
+        <div></div>
+        <div class="field wizard-system-field"><label>اسم النظام</label><input id="w_sysName" type="text" value="${escapeHtml(newClientData.sysName || '')}"></div>
+        <div class="field wizard-system-field"><label>منذ متى؟</label><input id="w_sysAge" type="text" value="${escapeHtml(newClientData.sysAge || '')}"></div>
+        <div class="field wizard-system-field"><label>جاهز أم مخصص؟</label>
+          <select id="w_sysType"><option value="">اختر...</option><option ${newClientData.sysType === 'جاهز' ? 'selected' : ''}>جاهز</option><option ${newClientData.sysType === 'مطوّر خصيصاً' ? 'selected' : ''}>مطوّر خصيصاً</option></select>
+        </div>
+      </div>
+      <div class="card-title" style="margin-top:16px;">المشاكل المكتشفة</div>
+      <div class="hint" style="margin-bottom:8px;">وضّح التفاصيل الفنية: وقت الجرد؟ الصرف؟ الاستلام؟ فيه باركود؟</div>
+      <div id="w_problems"></div>
+      <button class="btn-secondary" onclick="addWizardProblemRow()">+ إضافة مشكلة</button>`;
+    (newClientData.problems || []).forEach(p => addWizardProblemRow(p));
+    toggleWizardSystemFields();
+  } else if (wizardStep === 3) {
+    content.innerHTML = `
+      <div class="field"><label>الاحتياجات والتقارير المطلوبة</label><textarea id="w_needs" rows="2">${escapeHtml(newClientData.needs || '')}</textarea></div>
+      <div class="card-title" style="margin-top:14px;">الموديولات المطلوبة</div>
+      <div class="chips" id="w_modules">
+        ${['POS', 'Inventory', 'Purchasing', 'Tablet Ordering', 'Accounting', 'Dashboard'].map(m =>
+          `<label class="chip"><input type="checkbox" value="${m}" ${(newClientData.modules || []).includes(m) ? 'checked' : ''}> ${m}</label>`).join('')}
+      </div>
+      <input id="w_modulesOther" type="text" placeholder="موديولات أخرى (اختياري)" style="margin-top:10px;" value="${escapeHtml(newClientData.modulesOther || '')}">
+      <div class="card-title" style="margin-top:16px;">البيانات المالية</div>
+      <div class="grid2">
+        <div class="field"><label>قيمة الصفقة المتوقعة</label><input id="w_dealValue" type="number" value="${escapeHtml(newClientData.dealValue || '')}"></div>
+        <div class="field"><label>العملة</label>
+          <select id="w_currency"><option value="EGP" ${newClientData.currency === 'EGP' ? 'selected' : ''}>جنيه مصري</option><option value="KWD" ${newClientData.currency === 'KWD' ? 'selected' : ''}>دينار كويتي</option><option value="OMR" ${newClientData.currency === 'OMR' ? 'selected' : ''}>ريال عُماني</option></select>
+        </div>
+        <div class="field"><label>تاريخ الإغلاق المتوقع</label><input id="w_expectedClose" type="date" value="${escapeHtml(newClientData.expectedClose || '')}"></div>
+        <div class="field"><label>تاريخ المتابعة القادمة</label><input id="w_nextFollowUp" type="date" value="${escapeHtml(newClientData.nextFollowUp || '')}"></div>
+      </div>`;
+  } else if (wizardStep === 4) {
+    content.innerHTML = `
+      <div class="grid2">
+        <div class="field"><label>مين هيحضر الديمو؟</label><input id="w_attendees" type="text" value="${escapeHtml(newClientData.attendees || '')}"></div>
+        <div class="field"><label>مين صاحب القرار؟</label><input id="w_decision" type="text" value="${escapeHtml(newClientData.decision || '')}"></div>
+        <div class="field"><label>الإدارة المالية لازم تحضر؟</label><select id="w_finance"><option value="">اختر...</option><option ${newClientData.finance === 'نعم' ? 'selected' : ''}>نعم</option><option ${newClientData.finance === 'لا' ? 'selected' : ''}>لا</option></select></div>
+        <div class="field"><label>مسؤول التشغيل لازم يحضر؟</label><select id="w_ops"><option value="">اختر...</option><option ${newClientData.ops === 'نعم' ? 'selected' : ''}>نعم</option><option ${newClientData.ops === 'لا' ? 'selected' : ''}>لا</option></select></div>
+        <div class="field"><label>تاريخ الديمو المقترح</label><input id="w_demoDate" type="date" value="${escapeHtml(newClientData.demoDate || '')}"></div>
+        <div class="field"><label>الساعة</label><input id="w_demoTime" type="time" value="${escapeHtml(newClientData.demoTime || '')}"></div>
+        <div class="field" style="grid-column:span 2;"><label>المكان</label><input id="w_demoPlace" type="text" value="${escapeHtml(newClientData.demoPlace || '')}"></div>
+      </div>
+      <div class="card-title" style="margin-top:16px;">جهات اتصال إضافية</div>
+      <div id="w_contacts"></div>
+      <button class="btn-secondary" onclick="addContactRow('w_contacts')">+ إضافة جهة اتصال</button>`;
+    (newClientData.contacts || []).forEach(ct => addContactRow('w_contacts', ct));
+  }
+}
+
+function toggleWizardSystemFields() {
+  const has = document.getElementById('w_hasSystem').value;
+  document.querySelectorAll('.wizard-system-field').forEach(el => { el.style.display = has === 'نعم' ? 'flex' : 'none'; });
+}
+
+function addWizardProblemRow(existing) {
+  wProblemCount++;
+  const rid = 'wp' + wProblemCount;
+  const div = document.createElement('div');
+  div.className = 'problem-row';
+  div.setAttribute('data-id', rid);
+  div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 90px 28px; gap:6px; margin-bottom:6px;';
+  div.innerHTML = `
+    <input type="text" placeholder="المشكلة" id="${rid}_issue" value="${escapeHtml((existing && existing.issue) || '')}">
+    <input type="text" placeholder="التفاصيل الفنية" id="${rid}_detail" value="${escapeHtml((existing && existing.detail) || '')}">
+    <select id="${rid}_priority">
+      <option value="">الأولوية</option>
+      <option ${existing && existing.priority === 'عالية' ? 'selected' : ''}>عالية</option>
+      <option ${existing && existing.priority === 'متوسطة' ? 'selected' : ''}>متوسطة</option>
+      <option ${existing && existing.priority === 'منخفضة' ? 'selected' : ''}>منخفضة</option>
+    </select>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:#C0392B;cursor:pointer;">✕</button>
+  `;
+  document.getElementById('w_problems').appendChild(div);
+}
+
+function saveWizardStepData() {
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  if (wizardStep === 1) {
+    Object.assign(newClientData, {
+      name: v('w_name'), phone: v('w_phone'), country: v('w_country'), activity: v('w_activity'),
+      branches: v('w_branches'), users: v('w_users'), warehouse: v('w_warehouse'),
+      warehouseCount: v('w_warehouseCount'), contact: v('w_contact'), date: v('w_date'), leadSource: v('w_leadSource'),
+      salesId: v('w_salesId'),
+    });
+  } else if (wizardStep === 2) {
+    Object.assign(newClientData, {
+      hasSystem: v('w_hasSystem'), sysName: v('w_sysName'), sysAge: v('w_sysAge'), sysType: v('w_sysType'),
+      problems: collectProblemsFromDom('w_problems'),
+    });
+  } else if (wizardStep === 3) {
+    const modules = Array.from(document.querySelectorAll('#w_modules input[type=checkbox]:checked')).map(b => b.value);
+    const other = v('w_modulesOther');
+    if (other) modules.push(other);
+    Object.assign(newClientData, {
+      needs: v('w_needs'), modules, modulesOther: other,
+      dealValue: v('w_dealValue'), currency: v('w_currency'), expectedClose: v('w_expectedClose'), nextFollowUp: v('w_nextFollowUp'),
+    });
+  } else if (wizardStep === 4) {
+    Object.assign(newClientData, {
+      attendees: v('w_attendees'), decision: v('w_decision'), finance: v('w_finance'), ops: v('w_ops'),
+      demoDate: v('w_demoDate'), demoTime: v('w_demoTime'), demoPlace: v('w_demoPlace'),
+      contacts: collectContactsFromDom('w_contacts'),
+    });
+  }
+}
+
+function wizardBack() {
+  saveWizardStepData();
+  wizardStep--;
+  renderWizardStep();
+}
+
+async function wizardNext() {
+  const errEl = document.getElementById('new-error');
+  errEl.style.display = 'none';
+  if (wizardStep === 1) {
+    if (!document.getElementById('w_name').value.trim()) {
+      errEl.textContent = 'اكتب اسم العميل الأول.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const salesField = document.getElementById('w_salesId');
+    if (salesField && !salesField.value) {
+      errEl.textContent = 'اختار السيلز المسؤول عن العميل ده.';
+      errEl.style.display = 'block';
+      return;
+    }
+  }
+  saveWizardStepData();
+  if (wizardStep < WIZARD_TOTAL_STEPS) {
+    wizardStep++;
+    renderWizardStep();
+    return;
+  }
+  await submitNewClientFromWizard();
+}
+
+async function submitNewClientFromWizard() {
+  const errEl = document.getElementById('new-error');
+  const btn = document.getElementById('wizard-next-btn');
+  btn.disabled = true;
+  btn.innerHTML = 'جارِ الحفظ<span class="spinner"></span>';
+
+  const d = {
+    name: newClientData.name, phone: newClientData.phone, country: newClientData.country,
+    activity: newClientData.activity, branches: newClientData.branches, users_count: newClientData.users,
+    warehouse: newClientData.warehouse, warehouse_count: newClientData.warehouseCount,
+    contact: newClientData.contact, visit_date: newClientData.date, lead_source: newClientData.leadSource,
+    has_system: newClientData.hasSystem, sys_name: newClientData.sysName, sys_age: newClientData.sysAge, sys_type: newClientData.sysType,
+    problems: newClientData.problems || [], needs: newClientData.needs, modules: newClientData.modules || [],
+    deal_value: newClientData.dealValue, currency: newClientData.currency || 'EGP',
+    expected_close_date: newClientData.expectedClose, next_follow_up_date: newClientData.nextFollowUp,
+    attendees: newClientData.attendees, decision: newClientData.decision, finance: newClientData.finance, ops: newClientData.ops,
+    demo_date: newClientData.demoDate, demo_time: newClientData.demoTime, demo_place: newClientData.demoPlace,
+    contacts: newClientData.contacts || [],
+    sales_id: currentProfile.role === 'sales' ? currentProfile.id : (newClientData.salesId || null),
+    stage: 'discovery', review_status: 'بانتظار المراجعة',
+  };
+
+  const { error } = await sb.from('clients').insert(d);
+  if (error) {
+    errEl.textContent = 'خطأ: ' + error.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'حفظ العميل';
+    return;
+  }
+  showToast('تم حفظ العميل بنجاح', 'success');
+  closeModal();
+  await loadClients();
+}
+
 let contactCounters = {};
 function addContactRow(containerId, existing) {
   contactCounters[containerId] = (contactCounters[containerId] || 0) + 1;
@@ -590,6 +898,64 @@ function collectContactsFromDom(containerId) {
     if (name || phone) out.push({ name, role, phone });
   });
   return out;
+}
+function addProblemRow(prefix) {
+  problemCounters[prefix] = (problemCounters[prefix] || 0) + 1;
+  const rid = prefix + '_p' + problemCounters[prefix];
+  const div = document.createElement('div');
+  div.className = 'problem-row';
+  div.setAttribute('data-id', rid);
+  div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 90px 28px; gap:6px; margin-bottom:6px;';
+  div.innerHTML = `
+    <input type="text" placeholder="المشكلة" id="${rid}_issue">
+    <input type="text" placeholder="التفاصيل الفنية" id="${rid}_detail">
+    <select id="${rid}_priority"><option value="">الأولوية</option><option>عالية</option><option>متوسطة</option><option>منخفضة</option></select>
+    <button onclick="this.parentElement.remove()" style="border:none;background:transparent;color:#C0392B;cursor:pointer;">✕</button>
+  `;
+  document.getElementById(prefix + '_problems').appendChild(div);
+}
+
+function collectModulesFrom(prefix) {
+  const boxes = document.querySelectorAll('#' + prefix + '_modules input[type=checkbox]:checked');
+  return Array.from(boxes).map(b => b.value);
+}
+
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+async function submitNewClient() {
+  const errEl = document.getElementById('new-error');
+  const btn = document.getElementById('new-client-save-btn');
+  errEl.style.display = 'none';
+  const name = v('new_name');
+  if (!name) { errEl.textContent = 'اكتب اسم العميل.'; errEl.style.display = 'block'; return; }
+  btn.disabled = true;
+  btn.innerHTML = 'جارِ الحفظ<span class="spinner"></span>';
+  const d = {
+    name, phone: v('new_phone'), country: v('new_country'),
+    activity: v('new_activity'), branches: v('new_branches'), users_count: v('new_users'),
+    warehouse: v('new_warehouse'), warehouse_count: v('new_warehouseCount'), contact: v('new_contact'), visit_date: v('new_date'),
+    lead_source: v('new_leadSource'),
+    has_system: v('new_hasSystem'), sys_name: v('new_sysName'), sys_age: v('new_sysAge'), sys_type: v('new_sysType'),
+    problems: collectProblemsFromDom('new_problems'), needs: v('new_needs'),
+    modules: collectModulesFrom('new'),
+    deal_value: v('new_dealValue'), currency: v('new_currency') || 'EGP', expected_close_date: v('new_expectedClose'),
+    attendees: v('new_attendees'), decision: v('new_decision'), finance: v('new_finance'), ops: v('new_ops'),
+    demo_date: v('new_demoDate'), demo_time: v('new_demoTime'), demo_place: v('new_demoPlace'),
+    next_follow_up_date: v('new_nextFollowUp'),
+    contacts: collectContactsFromDom('new_contacts'),
+    sales_id: currentProfile.id, stage: 'discovery', review_status: 'بانتظار المراجعة',
+  };
+  const { error } = await sb.from('clients').insert(d);
+  if (error) {
+    errEl.textContent = 'خطأ: ' + error.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'حفظ العميل';
+    return;
+  }
+  showToast('تم حفظ العميل بنجاح', 'success');
+  closeModal();
+  await loadClients();
 }
 
 // ---------- Client detail modal ----------
@@ -875,5 +1241,15 @@ async function logActivity(clientId) {
 
 function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
 </script>
+<div id="print-view" style="display:none;"></div>
+<style>
+  @media print {
+    body * { visibility:hidden; }
+    #print-view, #print-view * { visibility:visible; }
+    #print-view { display:block !important; position:absolute; top:0; right:0; left:0; padding:20px; }
+    #print-view h2, #print-view h3 { page-break-after:avoid; }
+    #print-view table, #print-view .stat-card, #print-view .card { page-break-inside:avoid; }
+  }
+</style>
 </body>
 </html>

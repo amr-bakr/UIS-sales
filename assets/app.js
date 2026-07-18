@@ -32,7 +32,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v18';
+const APP_BUILD_VERSION = 'v23';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -147,14 +147,30 @@ function escapeHtml(str) {
 }
 
 // ---------- Phase 3: الماليات والتوقعات ----------
-// احتمالية الإغلاق التلقائية حسب المرحلة — تقدر تعدّل النسب دي براحتك
+// دي قيم افتراضية بس — بتتحمّل وتتحدّث فعليًا من جدول app_settings (تعديلها من صفحة المستخدمين → الإعدادات)
 const STAGE_PROBABILITY = {
   discovery: 0.10, demo_scheduled: 0.25, demo_done: 0.40,
   proposal: 0.60, negotiation: 0.75, won: 1, lost: 0,
 };
 
-// سعر الصرف التقريبي لكل عملة مقابل الدولار — عدّل الأرقام دي لما الأسعار تتغيّر
 const CURRENCY_TO_USD = { EGP: 1 / 49, KWD: 3.25, OMR: 2.6 };
+
+let _settingsLoaded = false;
+async function loadAppSettings() {
+  if (_settingsLoaded) return;
+  try {
+    await ensureSb();
+    const { data, error } = await sb.from('app_settings').select('*');
+    if (error || !data) return;
+    data.forEach(row => {
+      if (row.key === 'currency_rates' && row.value) Object.assign(CURRENCY_TO_USD, row.value);
+      if (row.key === 'stage_probabilities' && row.value) Object.assign(STAGE_PROBABILITY, row.value);
+    });
+    _settingsLoaded = true;
+  } catch (e) {
+    console.error('تعذر تحميل الإعدادات، هيتم استخدام القيم الافتراضية:', e);
+  }
+}
 
 function weightedValue(client) {
   const val = Number(client.deal_value) || 0;
@@ -253,6 +269,7 @@ const ICONS = {
   logout: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg>',
   moon: '<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M16.5 12.8A7 7 0 0 1 7.2 3.5a7.5 7.5 0 1 0 9.3 9.3z"/></svg>',
   sun: '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none"/><path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M4.5 15.5l1.4-1.4M14.1 5.9l1.4-1.4"/></svg>',
+  search: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M17 17l-4-4"/></svg>',
 };
 
 // ---------- الشريط الجانبي الموحد ----------
@@ -262,13 +279,16 @@ function renderSidebar(activeKey, profile) {
   const links = [];
   if (profile.role === 'admin') {
     links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة', icon: ICONS.dashboard });
+    links.push({ key: 'clients', href: 'clients.html', label: 'العملاء', icon: ICONS.search });
     links.push({ key: 'users', href: 'users.html', label: 'المستخدمون', icon: ICONS.users });
   }
   if (profile.role === 'sales') {
     links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي', icon: ICONS.pipeline });
+    links.push({ key: 'clients', href: 'clients.html', label: 'بحث العملاء', icon: ICONS.search });
   }
   if (profile.role === 'support') {
     links.push({ key: 'review', href: 'support.html', label: 'مراجعة النماذج', icon: ICONS.review });
+    links.push({ key: 'clients', href: 'clients.html', label: 'بحث العملاء', icon: ICONS.search });
   }
   root.innerHTML = `
     <div class="sidebar-brand">

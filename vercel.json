@@ -1,13 +1,13 @@
 {
   "headers": [
     {
-      "source": "/assets/(.*).js",
+      "source": "/assets/app.js",
       "headers": [
         { "key": "Content-Type", "value": "application/javascript; charset=utf-8" }
       ]
     },
     {
-      "source": "/assets/(.*).css",
+      "source": "/assets/styles.css",
       "headers": [
         { "key": "Content-Type", "value": "text/css; charset=utf-8" }
       ]
