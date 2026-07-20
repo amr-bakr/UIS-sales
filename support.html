@@ -11,30 +11,39 @@
 <link rel="preconnect" href="https://unpkg.com">
 <link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-
-<link rel="stylesheet" href="assets/styles.css?v=17">
+<link rel="stylesheet" href="assets/styles.css?v=25">
 </head>
 <body>
 <div class="app-shell">
 <div class="sidebar" id="sidebar-root"></div>
 <div class="main-content">
-<div class="wrap" style="position:relative;">
+<div class="wrap wrap-wide" style="position:relative;">
   <div class="topbar">
     <div>
       <div class="brand-title">مراجعة النماذج</div>
       <div class="brand-sub" id="who">...</div>
     </div>
     <div class="nav-links">
-      <button class="nav-link" id="filter-pending" onclick="setFilter('pending')">بانتظار المراجعة</button>
-      <button class="nav-link" id="filter-all" onclick="setFilter('all')">الكل</button>
-      <button class="btn-logout" onclick="logout()"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg> خروج</button>
+      <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>
 
-  <div id="list"><div class="empty-state"><span class="spinner"></span> جارِ التحميل...</div></div>
+  <div class="support-shell">
+    <div class="support-list-panel">
+      <div class="support-list-tabs">
+        <button class="nav-link active" id="filter-pending" onclick="setFilter('pending')">بانتظار المراجعة</button>
+        <button class="nav-link" id="filter-all" onclick="setFilter('all')">الكل</button>
+      </div>
+      <input id="support-search" type="text" placeholder="بحث بالاسم أو رقم التليفون..." style="margin:10px 0;" oninput="renderList()">
+      <div id="support-list"><div class="empty-state"><span class="spinner"></span> جارِ التحميل...</div></div>
+    </div>
+    <div class="support-detail-panel" id="support-detail">
+      <div class="empty-state">اختار عميل من القائمة على اليمين عشان تشوف تفاصيله وتقدر تحدّثها</div>
+    </div>
+  </div>
 </div>
-
-<div id="modal-root"></div>
+</div>
+</div>
 
 <div id="print-view" style="display:none;"></div>
 <style>
@@ -46,8 +55,6 @@
     #print-view table, #print-view .stat-card, #print-view .card { page-break-inside:avoid; }
   }
 </style>
-</div>
-</div>
 
 <script defer>
 // ============================================================
@@ -84,7 +91,7 @@ function toggleTheme() {
 // بعد ما تعمل مشروع على supabase.com، هات القيمتين دول من:
 // Project Settings → API → Project URL / anon public key
 // ============================================================
-const APP_BUILD_VERSION = 'v23';
+const APP_BUILD_VERSION = 'v25';
 const SUPABASE_URL = "https://lndacyhcjrpybbsjwupw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZGFjeWhjanJweWJic2p3dXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODE3NzAsImV4cCI6MjA5OTE1Nzc3MH0.qHjpDh4Qk3Plau6_412hRwSl5qclIKG3cGPmoTqi3KU";
 
@@ -322,6 +329,7 @@ const ICONS = {
   moon: '<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M16.5 12.8A7 7 0 0 1 7.2 3.5a7.5 7.5 0 1 0 9.3 9.3z"/></svg>',
   sun: '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none"/><path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M4.5 15.5l1.4-1.4M14.1 5.9l1.4-1.4"/></svg>',
   search: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M17 17l-4-4"/></svg>',
+  settings: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.8v2M10 15.2v2M17.2 10h-2M4.8 10h-2M15.1 4.9l-1.4 1.4M6.3 13.7l-1.4 1.4M15.1 15.1l-1.4-1.4M6.3 6.3L4.9 4.9"/></svg>',
 };
 
 // ---------- الشريط الجانبي الموحد ----------
@@ -333,6 +341,7 @@ function renderSidebar(activeKey, profile) {
     links.push({ key: 'dashboard', href: 'management.html', label: 'لوحة الإدارة', icon: ICONS.dashboard });
     links.push({ key: 'clients', href: 'clients.html', label: 'العملاء', icon: ICONS.search });
     links.push({ key: 'users', href: 'users.html', label: 'المستخدمون', icon: ICONS.users });
+    links.push({ key: 'settings', href: 'settings.html', label: 'الإعدادات', icon: ICONS.settings });
   }
   if (profile.role === 'sales') {
     links.push({ key: 'pipeline', href: 'sales.html', label: 'عملائي', icon: ICONS.pipeline });
@@ -515,82 +524,132 @@ let currentProfile = null;
 let allClients = [];
 let profilesById = {};
 let currentFilter = 'pending';
+let selectedClientId = null;
 
 (async function init() {
   currentProfile = await requireRole(['support', 'admin']);
   if (!currentProfile) return;
   renderSidebar('review', currentProfile);
   document.getElementById('who').textContent = (currentProfile.full_name || 'تيكنيكال سبورت');
-  await loadProfiles();
+
+  const { data: profiles } = await sb.from('profiles').select('*');
+  (profiles || []).forEach(p => profilesById[p.id] = p);
+
   await loadClients();
   setFilter('pending');
 })();
-
-async function loadProfiles() {
-  const { data } = await sb.from('profiles').select('*');
-  (data || []).forEach(p => profilesById[p.id] = p);
-}
 
 async function loadClients() {
   const { data, error } = await sb.from('clients').select('*').order('created_at', { ascending: false });
   if (error) { showToast('خطأ: ' + error.message, 'error'); return; }
   allClients = data || [];
-  render();
+  renderList();
 }
 
 function setFilter(f) {
   currentFilter = f;
   document.getElementById('filter-pending').classList.toggle('active', f === 'pending');
   document.getElementById('filter-all').classList.toggle('active', f === 'all');
-  render();
+  renderList();
 }
 
-function render() {
-  const el = document.getElementById('list');
-  const items = currentFilter === 'pending' ? allClients.filter(c => c.review_status === 'بانتظار المراجعة') : allClients;
-  if (items.length === 0) { el.innerHTML = '<div class="hint">لا توجد نماذج هنا.</div>'; return; }
-  el.innerHTML = '';
-  items.forEach(c => {
-    const salesName = (profilesById[c.sales_id] && profilesById[c.sales_id].full_name) || '-';
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+function filteredClients() {
+  const search = document.getElementById('support-search').value.trim().toLowerCase();
+  let items = currentFilter === 'pending' ? allClients.filter(c => c.review_status === 'بانتظار المراجعة') : allClients;
+  if (search) {
+    items = items.filter(c => (c.name || '').toLowerCase().includes(search) || (c.phone || '').toLowerCase().includes(search));
+  }
+  return items;
+}
+
+function renderList() {
+  const items = filteredClients();
+  const el = document.getElementById('support-list');
+  if (items.length === 0) {
+    el.innerHTML = '<div class="empty-state">لا توجد نماذج هنا</div>';
+    return;
+  }
+  el.innerHTML = items.map(c => {
+    const salesName = (profilesById[c.sales_id] && (profilesById[c.sales_id].full_name || profilesById[c.sales_id].email)) || '-';
+    return `
+    <div class="support-list-item${c.id === selectedClientId ? ' active' : ''}" data-client-id="${c.id}">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-weight:700; font-size:13.5px;">${escapeHtml(c.name || '-')}</span>
+        <span class="badge-pill ${reviewBadgeClass(c.review_status)}" style="font-size:10.5px;">${escapeHtml(c.review_status)}</span>
+      </div>
+      <div class="hint" style="font-size:11.5px;">السيلز: ${escapeHtml(salesName)} | ${escapeHtml(stageLabel(c.stage))}</div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('[data-client-id]').forEach(item => {
+    item.addEventListener('click', () => {
+      selectedClientId = item.getAttribute('data-client-id');
+      renderList();
+      renderDetail();
+    });
+  });
+}
+
+async function renderDetail() {
+  const c = allClients.find(x => x.id === selectedClientId);
+  const panel = document.getElementById('support-detail');
+  if (!c) { panel.innerHTML = '<div class="empty-state">اختار عميل من القائمة على اليمين عشان تشوف تفاصيله</div>'; return; }
+
+  panel.innerHTML = '<div class="empty-state"><span class="spinner"></span> جارِ التحميل...</div>';
+  const { data: debriefs } = await sb.from('debriefs').select('*').eq('client_id', c.id).order('created_at', { ascending: false });
+
+  const salesName = (profilesById[c.sales_id] && (profilesById[c.sales_id].full_name || profilesById[c.sales_id].email)) || '-';
+
+  panel.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+      <div>
         <div class="card-title" style="margin:0;">${escapeHtml(c.name || '-')}</div>
-        <div style="display:flex; gap:6px;">
-          <span class="badge-pill ${reviewBadgeClass(c.review_status)}">${escapeHtml(c.review_status)}</span>
-          ${c.stage === 'won' && c.implementation_stage ? `<span class="badge-pill ${implementationBadgeClass(c.implementation_stage)}">${escapeHtml(c.implementation_stage)}</span>` : ''}
-        </div>
+        <div class="hint">السيلز: ${escapeHtml(salesName)} | ${escapeHtml(stageLabel(c.stage))} | ${escapeHtml(c.phone || '-')}</div>
       </div>
-      <div class="hint" style="margin-bottom:8px;">السيلز: ${escapeHtml(salesName)} | المرحلة: ${stageLabel(c.stage)} | تليفون العميل: ${escapeHtml(c.phone || '-')}</div>
-      <div class="summary-box">${buildClientSummary(c)}</div>
-      ${c.stage === 'won' ? `
-      <div class="field" style="margin-top:10px;">
-        <label>مرحلة التنفيذ</label>
-        <select data-impl-select="${c.id}">
-          <option value="">لم تبدأ بعد</option>
-          ${IMPLEMENTATION_STAGES.map(s => `<option value="${s}" ${c.implementation_stage === s ? 'selected' : ''}>${s}</option>`).join('')}
-        </select>
-      </div>` : ''}
-      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-        <button class="btn-secondary" onclick="setReview('${c.id}','تم الاستلام')">تحديد كمستلم</button>
-        <button class="btn-secondary" onclick="setReview('${c.id}','يحتاج استكمال')">يحتاج استكمال</button>
-        <button class="btn-secondary" onclick="openDebriefModal('${c.id}')">إضافة Debrief</button>
-        <a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">تقرير Go-Live</a>
-        <button class="btn-secondary" onclick='exportClientPdf(${JSON.stringify(c.id)})'>تصدير بيانات العميل PDF</button>
-        ${c.stage === 'won' ? `<button class="btn-primary" data-impl-save="${c.id}">حفظ مرحلة التنفيذ</button>` : ''}
-      </div>
-    `;
-    if (c.stage === 'won') {
-      const saveBtn = card.querySelector(`[data-impl-save="${c.id}"]`);
-      saveBtn.addEventListener('click', async () => {
-        const select = card.querySelector(`[data-impl-select="${c.id}"]`);
-        await sb.from('clients').update({ implementation_stage: select.value || null }).eq('id', c.id);
-        showToast('تم تحديث مرحلة التنفيذ', 'success');
-        await loadClients();
-      });
-    }
-    el.appendChild(card);
+      ${c.stage === 'won' && c.implementation_stage ? `<span class="badge-pill ${implementationBadgeClass(c.implementation_stage)}">${escapeHtml(c.implementation_stage)}</span>` : ''}
+    </div>
+
+    <div class="segmented" style="margin:14px 0;">
+      <button class="seg-btn seg-pending${c.review_status === 'بانتظار المراجعة' ? ' active' : ''}" data-status="بانتظار المراجعة">بانتظار المراجعة</button>
+      <button class="seg-btn seg-received${c.review_status === 'تم الاستلام' ? ' active' : ''}" data-status="تم الاستلام">تم الاستلام</button>
+      <button class="seg-btn seg-needs${c.review_status === 'يحتاج استكمال' ? ' active' : ''}" data-status="يحتاج استكمال">يحتاج استكمال</button>
+    </div>
+
+    <div class="summary-box">${buildClientSummary(c)}</div>
+
+    ${c.stage === 'won' ? `
+    <div class="card-title" style="margin-top:16px;">مرحلة التنفيذ</div>
+    <div class="field">
+      <select id="detail-impl-select">
+        <option value="">لم تبدأ بعد</option>
+        ${IMPLEMENTATION_STAGES.map(s => `<option value="${s}" ${c.implementation_stage === s ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <button class="btn-secondary" style="margin-top:8px;" onclick="saveImplementationStage('${c.id}')">حفظ مرحلة التنفيذ</button>
+    ` : ''}
+
+    <div class="card-title" style="margin-top:18px;">Debrief</div>
+    <div id="debrief-list">${(debriefs || []).map(db => `
+      <div class="hint" style="margin-bottom:8px; padding:8px; background:var(--blue-50); border-radius:8px;">
+        ${new Date(db.created_at).toLocaleDateString('ar-EG')}<br>
+        إيجابيات: ${escapeHtml(db.went_well || '-')}<br>اعتراضات: ${escapeHtml(db.objections || '-')}<br>الخطوة التالية: ${escapeHtml(db.next_step || '-')}
+      </div>`).join('') || '<div class="hint">لا يوجد Debrief بعد</div>'}
+    </div>
+    <div class="grid2" style="margin-top:8px;">
+      <div class="field"><label>إيجابيات</label><input id="db-well" type="text"></div>
+      <div class="field"><label>اعتراضات</label><input id="db-obj" type="text"></div>
+    </div>
+    <div class="field" style="margin-top:8px;"><label>الخطوة التالية</label><input id="db-next" type="text"></div>
+    <button class="btn-secondary" style="margin-top:8px;" onclick="addDebrief('${c.id}')">إضافة Debrief</button>
+
+    <div style="display:flex; gap:8px; margin-top:18px; flex-wrap:wrap;">
+      <a href="report.html?client=${c.id}" class="btn-secondary" style="text-decoration:none; display:inline-block;">تقرير Go-Live</a>
+      <button class="btn-secondary" onclick='exportClientPdf(${JSON.stringify(c.id)})'>تصدير بيانات العميل PDF</button>
+    </div>
+  `;
+
+  panel.querySelectorAll('.segmented .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => setReview(c.id, btn.getAttribute('data-status')));
   });
 }
 
@@ -598,36 +657,28 @@ async function setReview(clientId, status) {
   await sb.from('clients').update({ review_status: status }).eq('id', clientId);
   showToast('تم تحديث حالة المراجعة', 'success');
   await loadClients();
-  render();
+  if (selectedClientId === clientId) renderDetail();
 }
 
-async function openDebriefModal(clientId) {
-  const root = document.getElementById('modal-root');
-  root.innerHTML = `
-  <div class="modal-overlay" style="position:fixed;">
-    <div class="modal-box" style="max-width:420px;">
-      <div class="modal-head"><div class="card-title" style="margin:0;">إضافة Debrief</div><button class="modal-close" onclick="closeModal()">✕</button></div>
-      <div class="field"><label>إيجابيات الديمو</label><input id="db_well" type="text"></div>
-      <div class="field"><label>اعتراضات</label><input id="db_obj" type="text"></div>
-      <div class="field"><label>الخطوة التالية</label><input id="db_next" type="text"></div>
-      <button class="btn-primary" style="width:100%; margin-top:10px;" onclick="saveDebrief('${clientId}')">حفظ</button>
-    </div>
-  </div>`;
+async function saveImplementationStage(clientId) {
+  const value = document.getElementById('detail-impl-select').value || null;
+  await sb.from('clients').update({ implementation_stage: value }).eq('id', clientId);
+  showToast('تم تحديث مرحلة التنفيذ', 'success');
+  await loadClients();
+  renderDetail();
 }
 
-async function saveDebrief(clientId) {
+async function addDebrief(clientId) {
   const d = {
     client_id: clientId, created_by: currentProfile.id,
-    went_well: document.getElementById('db_well').value.trim(),
-    objections: document.getElementById('db_obj').value.trim(),
-    next_step: document.getElementById('db_next').value.trim(),
+    went_well: document.getElementById('db-well').value.trim(),
+    objections: document.getElementById('db-obj').value.trim(),
+    next_step: document.getElementById('db-next').value.trim(),
   };
   await sb.from('debriefs').insert(d);
   showToast('تمت إضافة الـ Debrief', 'success');
-  closeModal();
+  renderDetail();
 }
-
-function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
 
 async function exportClientPdf(clientId) {
   const c = allClients.find(x => x.id === clientId);
@@ -640,21 +691,17 @@ async function exportClientPdf(clientId) {
   const files = await listClientFiles(clientId);
 
   const summaryHtml = escapeHtml(buildClientSummary(c)).split('\n').join('<br>');
-
   const debriefsHtml = (debriefs || []).map(db => `
     <div style="margin-bottom:8px;">
       <b>${new Date(db.created_at).toLocaleDateString('ar-EG')}</b> —
       إيجابيات: ${escapeHtml(db.went_well || '-')} | اعتراضات: ${escapeHtml(db.objections || '-')} | الخطوة التالية: ${escapeHtml(db.next_step || '-')}
     </div>`).join('') || '<div>لا يوجد Debrief مسجّل</div>';
-
   const activitiesHtml = (activities || []).map(a =>
     `<div>${a.activity_date} — ${escapeHtml(a.activity_type)}${a.notes ? (' — ' + escapeHtml(a.notes)) : ''}</div>`
   ).join('') || '<div>لا يوجد نشاط مسجّل</div>';
-
   const filesHtml = (files || []).length
     ? files.map(f => `<div>${escapeHtml(f.name.replace(/^\d+_/, ''))}</div>`).join('')
     : '<div>لا يوجد مرفقات</div>';
-
   const implRow = c.stage === 'won'
     ? `<p><b>مرحلة التنفيذ:</b> ${escapeHtml(c.implementation_stage || 'لم تبدأ بعد')}</p>`
     : '';

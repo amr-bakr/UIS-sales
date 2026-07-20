@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نظام إدارة العملاء — تقرير Go-Live</title>
+<title>نظام إدارة العملاء — الإعدادات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://lndacyhcjrpybbsjwupw.supabase.co">
@@ -11,43 +11,58 @@
 <link rel="preconnect" href="https://unpkg.com">
 <link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-
 <link rel="stylesheet" href="assets/styles.css?v=25">
-<style>
-  .item-row { display:grid; grid-template-columns:1fr 90px 32px; gap:8px; margin-bottom:8px; }
-  .issue-row { display:grid; grid-template-columns:1fr 1fr 100px 32px; gap:8px; margin-bottom:8px; }
-  #print-view { display:none; }
-  @media print {
-    body * { visibility:hidden; }
-    #print-view, #print-view * { visibility:visible; }
-    #print-view { display:block; position:absolute; top:0; right:0; left:0; padding:20px; }
-    #print-view h2, #print-view h3 { page-break-after:avoid; }
-    #print-view ul, #print-view p { page-break-inside:avoid; }
-  }
-</style>
 </head>
 <body>
-<div class="wrap">
+<div class="app-shell">
+<div class="sidebar" id="sidebar-root"></div>
+<div class="main-content">
+<div class="wrap" style="position:relative;">
   <div class="topbar">
-    <div class="brand">
-      <div class="brand-mark">UIS</div>
-      <div>
-        <div class="brand-title">تقرير التنفيذ والـ Go-Live</div>
-        <div class="brand-sub" id="client-name">...</div>
-      </div>
+    <div>
+      <div class="brand-title">الإعدادات</div>
+      <div class="brand-sub">أسعار الصرف، احتمالية الإغلاق، وسجل التدقيق</div>
     </div>
     <div class="nav-links">
-      <button class="btn-secondary" onclick="history.back()">رجوع</button>
-      <button class="btn-primary" id="save-report-btn" onclick="saveReport()">حفظ</button>
-      <button class="btn-secondary" onclick="printReport()">تصدير PDF</button>
-      <button class="btn-logout" onclick="logout()"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H8"/><path d="M13 13.5l4-3.5-4-3.5"/><path d="M17 10H8"/></svg> خروج</button>
+      <button class="btn-logout" onclick="logout()">خروج</button>
     </div>
   </div>
 
-  <div id="form-area"><div class="empty-state"><span class="spinner"></span> جارِ تحميل بيانات العميل...</div></div>
+  <div class="card">
+    <div class="card-title">أسعار الصرف مقابل الدولار</div>
+    <div class="hint" style="margin-bottom:10px;">مستخدمة في حساب قيمة الـ Pipeline وتحويل العملات في لوحة الإدارة.</div>
+    <div class="grid2">
+      <div class="field"><label>جنيه مصري (EGP) — كام جنيه للدولار</label><input id="rate-egp" type="number" step="0.0001" min="0"></div>
+      <div class="field"><label>دينار كويتي (KWD) — كام دولار للدينار</label><input id="rate-kwd" type="number" step="0.01" min="0"></div>
+      <div class="field"><label>ريال عُماني (OMR) — كام دولار للريال</label><input id="rate-omr" type="number" step="0.01" min="0"></div>
+    </div>
+    <button class="btn-primary" style="margin-top:10px;" onclick="saveCurrencyRates()">حفظ أسعار الصرف</button>
+    <div id="rates-save-msg" class="hint" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">احتمالية الإغلاق لكل مرحلة</div>
+    <div class="hint" style="margin-bottom:10px;">النسبة المستخدمة في حساب القيمة المرجّحة. عمود "المعدل الفعلي" بيوريك نسبة العملاء اللي وصلوا للمرحلة دي وكسبوا الصفقة فعلاً، بناءً على بياناتكم الحالية — استخدمه كمرجع لو حابب تعدّل الافتراض.</div>
+    <table class="data-table" id="probabilityTable">
+      <thead><tr><th>المرحلة</th><th>الاحتمالية المفترضة (%)</th><th>المعدل الفعلي من بياناتكم</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button class="btn-primary" style="margin-top:10px;" onclick="saveStageProbabilities()">حفظ الاحتماليات</button>
+    <div id="prob-save-msg" class="hint" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">سجل التدقيق (آخر التغييرات)</div>
+    <table class="data-table" id="auditTable">
+      <thead><tr><th>الوقت</th><th>مين عمل التغيير</th><th>العملية</th><th>التفاصيل</th></tr></thead>
+      <tbody><tr><td colspan="4" class="hint">جارِ التحميل...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+</div>
 </div>
 
-<div id="print-view"></div>
+<div id="modal-root"></div>
 
 <script defer>
 // ============================================================
@@ -514,206 +529,99 @@ function collectProblemsFromDom(containerId) {
 </script>
 <script defer>
 let currentProfile = null;
-let client = null;
-let report = null;
-const params = new URLSearchParams(window.location.search);
-const clientId = params.get('client');
+let profilesById = {};
 
 (async function init() {
-  currentProfile = await requireRole(['admin', 'support', 'sales']);
+  currentProfile = await requireRole(['admin']);
   if (!currentProfile) return;
-  if (!clientId) { document.getElementById('form-area').innerHTML = '<div class="error-box">مفيش عميل محدد.</div>'; return; }
-
-  const { data: c, error: clientErr } = await sb.from('clients').select('*').eq('id', clientId).single();
-  if (clientErr || !c) {
-    document.getElementById('form-area').innerHTML = '<div class="error-box">العميل ده مش موجود أو اتحذف.</div>';
-    document.querySelectorAll('.topbar .btn-primary, .topbar .nav-links .btn-secondary:not(:first-child)').forEach(b => b.style.display = 'none');
-    return;
-  }
-  client = c;
-  document.getElementById('client-name').textContent = client.name;
-
-  const { data: r } = await sb.from('implementation_reports').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1);
-  report = (r && r[0]) || null;
-  renderForm();
+  renderSidebar('settings', currentProfile);
+  const { data: profiles } = await sb.from('profiles').select('*');
+  (profiles || []).forEach(p => profilesById[p.id] = p);
+  await loadAppSettings();
+  renderCurrencyRates();
+  await renderProbabilityTable();
+  await loadAudit();
 })();
 
-function renderForm() {
-  const d = report || {};
-  document.getElementById('form-area').innerHTML = `
-    <div class="card">
-      <div class="card-title">نظرة عامة على المشروع</div>
-      <div class="grid2">
-        <div class="field"><label>اسم العميل</label><input value="${escapeHtml(client.name || '')}" disabled></div>
-        <div class="field"><label>الدولة</label><input value="${escapeHtml(client.country || '')}" disabled></div>
-        <div class="field"><label>اسم مهندس الميدان</label><input id="r_engineer" value="${escapeHtml(d.engineer_name || '')}"></div>
-        <div class="field"><label>تاريخ التفعيل</label><input id="r_activation" type="date" value="${escapeHtml(d.activation_date || '')}"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">ملاحظات الهاردوير والتركيب</div>
-      <textarea id="r_hardware" rows="3">${escapeHtml(d.hardware_notes || '')}</textarea>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Checklist التركيب</div>
-      <div id="checklist"></div>
-      <button class="btn-secondary" onclick="addChecklistItem()">+ إضافة بند</button>
-    </div>
-
-    <div class="card">
-      <div class="card-title">ملخص التدريب</div>
-      <textarea id="r_training" rows="3">${escapeHtml(d.training_summary || '')}</textarea>
-    </div>
-
-    <div class="card">
-      <div class="card-title">المشاكل والإجراءات</div>
-      <div id="issues"></div>
-      <button class="btn-secondary" onclick="addIssueItem()">+ إضافة مشكلة</button>
-    </div>
-
-    <div class="card">
-      <div class="card-title">حالة الـ Go-Live والتوصية</div>
-      <div class="field" style="margin-bottom:10px;">
-        <label>الحالة</label>
-        <select id="r_status">
-          <option value="قيد المراجعة" ${d.go_live_status === 'قيد المراجعة' ? 'selected' : ''}>قيد المراجعة</option>
-          <option value="جاهز" ${d.go_live_status === 'جاهز' ? 'selected' : ''}>جاهز</option>
-          <option value="غير جاهز" ${d.go_live_status === 'غير جاهز' ? 'selected' : ''}>غير جاهز</option>
-        </select>
-      </div>
-      <textarea id="r_recommendation" rows="2" placeholder="توصية مهندس الميدان">${escapeHtml(d.field_engineer_recommendation || '')}</textarea>
-    </div>
-
-    <div class="card">
-      <div class="card-title">التوقيع</div>
-      <div class="grid2">
-        <div class="field"><label>اسم مهندس الميدان (توقيع)</label><input id="r_sign_eng" value="${escapeHtml(d.signed_by_engineer || '')}"></div>
-        <div class="field"><label>اسم ممثل العميل (توقيع)</label><input id="r_sign_client" value="${escapeHtml(d.signed_by_client || '')}"></div>
-        <div class="field"><label>تاريخ التوقيع</label><input id="r_sign_date" type="date" value="${escapeHtml(d.sign_off_date || '')}"></div>
-      </div>
-    </div>
-  `;
-  renderListRows('checklist', d.installation_checklist || [], ['بند'], 'item-row', true);
-  renderListRows('issues', d.issues || [], ['المشكلة', 'الإجراء'], 'issue-row', false);
+function renderCurrencyRates() {
+  document.getElementById('rate-egp').value = CURRENCY_TO_USD.EGP ? (1 / CURRENCY_TO_USD.EGP).toFixed(4) : '';
+  document.getElementById('rate-kwd').value = CURRENCY_TO_USD.KWD || '';
+  document.getElementById('rate-omr').value = CURRENCY_TO_USD.OMR || '';
 }
 
-function renderListRows(containerId, items, labels, rowClass, hasDone) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = '';
-  items.forEach(it => addRow(containerId, rowClass, hasDone, it));
+async function saveCurrencyRates() {
+  const msgEl = document.getElementById('rates-save-msg');
+  const egpPerUsd = Number(document.getElementById('rate-egp').value) || 0;
+  const kwdToUsd = Number(document.getElementById('rate-kwd').value) || 0;
+  const omrToUsd = Number(document.getElementById('rate-omr').value) || 0;
+  if (!egpPerUsd || !kwdToUsd || !omrToUsd) { msgEl.textContent = 'من فضلك اكتب الأرقام كاملة.'; return; }
+  const value = { EGP: 1 / egpPerUsd, KWD: kwdToUsd, OMR: omrToUsd };
+  const { error } = await sb.from('app_settings').upsert({ key: 'currency_rates', value, updated_by: currentProfile.id }, { onConflict: 'key' });
+  if (error) { msgEl.textContent = 'خطأ: ' + error.message; return; }
+  Object.assign(CURRENCY_TO_USD, value);
+  showToast('تم حفظ أسعار الصرف', 'success');
+  msgEl.textContent = '';
 }
 
-function addRow(containerId, rowClass, hasDone, existing) {
-  const el = document.getElementById(containerId);
-  const rid = containerId + '_' + Date.now() + Math.random().toString(36).slice(2, 6);
-  const div = document.createElement('div');
-  div.className = rowClass;
-  div.setAttribute('data-id', rid);
-  if (rowClass === 'item-row') {
-    div.innerHTML = `
-      <input type="text" placeholder="بند التركيب" id="${rid}_text" value="${escapeHtml((existing && existing.item) || '')}">
-      <select id="${rid}_done"><option value="لا" ${existing && existing.done === false ? 'selected' : ''}>لسه</option><option value="تم" ${existing && existing.done === true ? 'selected' : ''}>تم</option></select>
-      <button onclick="this.parentElement.remove()">✕</button>
-    `;
-  } else {
-    div.innerHTML = `
-      <input type="text" placeholder="المشكلة" id="${rid}_issue" value="${escapeHtml((existing && existing.issue) || '')}">
-      <input type="text" placeholder="الإجراء المتخذ" id="${rid}_action" value="${escapeHtml((existing && existing.action) || '')}">
-      <input type="text" placeholder="المسؤول" id="${rid}_owner" value="${escapeHtml((existing && existing.owner) || '')}">
-      <button onclick="this.parentElement.remove()">✕</button>
-    `;
-  }
-  el.appendChild(div);
+async function renderProbabilityTable() {
+  const { data: clients } = await sb.from('clients').select('stage');
+  const all = clients || [];
+  const order = STAGES.map(s => s.key);
+  const tbody = document.querySelector('#probabilityTable tbody');
+  tbody.innerHTML = STAGES.map(s => {
+    const idx = order.indexOf(s.key);
+    const reached = all.filter(c => order.indexOf(c.stage) >= idx || c.stage === 'won' || c.stage === 'lost');
+    const relevant = s.key === 'won' || s.key === 'lost' ? all : reached;
+    const won = relevant.filter(c => c.stage === 'won').length;
+    const actualRate = relevant.length ? Math.round((won / relevant.length) * 100) : null;
+    const pct = Math.round((STAGE_PROBABILITY[s.key] ?? 0) * 100);
+    return `
+      <tr>
+        <td>${s.label}</td>
+        <td><input type="number" min="0" max="100" data-stage-prob="${s.key}" value="${pct}" style="width:90px;"></td>
+        <td>${actualRate === null ? 'لا توجد بيانات كافية' : (actualRate + '% (من ' + relevant.length + ' عميل)')}</td>
+      </tr>`;
+  }).join('');
 }
 
-function addChecklistItem() { addRow('checklist', 'item-row', true, null); }
-function addIssueItem() { addRow('issues', 'issue-row', false, null); }
-
-function collectChecklist() {
-  return Array.from(document.querySelectorAll('#checklist .item-row')).map(r => {
-    const rid = r.getAttribute('data-id');
-    return { item: document.getElementById(rid + '_text').value.trim(), done: document.getElementById(rid + '_done').value === 'تم' };
-  }).filter(x => x.item);
-}
-function collectIssues() {
-  return Array.from(document.querySelectorAll('#issues .issue-row')).map(r => {
-    const rid = r.getAttribute('data-id');
-    return {
-      issue: document.getElementById(rid + '_issue').value.trim(),
-      action: document.getElementById(rid + '_action').value.trim(),
-      owner: document.getElementById(rid + '_owner').value.trim(),
-    };
-  }).filter(x => x.issue || x.action);
+async function saveStageProbabilities() {
+  const msgEl = document.getElementById('prob-save-msg');
+  const value = {};
+  document.querySelectorAll('[data-stage-prob]').forEach(input => {
+    value[input.getAttribute('data-stage-prob')] = (Number(input.value) || 0) / 100;
+  });
+  const { error } = await sb.from('app_settings').upsert({ key: 'stage_probabilities', value, updated_by: currentProfile.id }, { onConflict: 'key' });
+  if (error) { msgEl.textContent = 'خطأ: ' + error.message; return; }
+  Object.assign(STAGE_PROBABILITY, value);
+  showToast('تم حفظ احتماليات الإغلاق', 'success');
+  msgEl.textContent = '';
 }
 
-async function saveReport() {
-  const btn = document.getElementById('save-report-btn');
-  btn.disabled = true;
-  btn.innerHTML = 'جارِ الحفظ<span class="spinner"></span>';
-  const d = {
-    client_id: clientId,
-    engineer_name: document.getElementById('r_engineer').value.trim(),
-    activation_date: document.getElementById('r_activation').value,
-    hardware_notes: document.getElementById('r_hardware').value.trim(),
-    installation_checklist: collectChecklist(),
-    training_summary: document.getElementById('r_training').value.trim(),
-    issues: collectIssues(),
-    go_live_status: document.getElementById('r_status').value,
-    field_engineer_recommendation: document.getElementById('r_recommendation').value.trim(),
-    signed_by_engineer: document.getElementById('r_sign_eng').value.trim(),
-    signed_by_client: document.getElementById('r_sign_client').value.trim(),
-    sign_off_date: document.getElementById('r_sign_date').value,
-    created_by: currentProfile.id,
-  };
-  try {
-    if (report && report.id) {
-      await sb.from('implementation_reports').update(d).eq('id', report.id);
-    } else {
-      const { data } = await sb.from('implementation_reports').insert(d).select().single();
-      report = data;
-    }
-    showToast('تم الحفظ بنجاح', 'success');
-  } catch (e) {
-    showToast('حصل خطأ أثناء الحفظ', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'حفظ';
-  }
+async function loadAudit() {
+  const { data, error } = await sb.from('audit_log').select('*').order('created_at', { ascending: false }).limit(30);
+  const tbody = document.querySelector('#auditTable tbody');
+  if (error) { tbody.innerHTML = '<tr><td colspan="4" class="hint">تعذر تحميل سجل التدقيق</td></tr>'; return; }
+  tbody.innerHTML = (data || []).map(a => `
+    <tr>
+      <td>${new Date(a.created_at).toLocaleString('ar-EG')}</td>
+      <td>${escapeHtml((profilesById[a.actor_id] && profilesById[a.actor_id].full_name) || '-')}</td>
+      <td>${escapeHtml(actionLabel(a.action))}</td>
+      <td>${escapeHtml(formatAuditDetails(a.details))}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="hint">لا يوجد نشاط مسجّل بعد</td></tr>';
 }
 
-function printReport() {
-  const d = {
-    engineer_name: document.getElementById('r_engineer').value,
-    activation_date: document.getElementById('r_activation').value,
-    hardware_notes: document.getElementById('r_hardware').value,
-    checklist: collectChecklist(),
-    training_summary: document.getElementById('r_training').value,
-    issues: collectIssues(),
-    status: document.getElementById('r_status').value,
-    recommendation: document.getElementById('r_recommendation').value,
-    sign_eng: document.getElementById('r_sign_eng').value,
-    sign_client: document.getElementById('r_sign_client').value,
-    sign_date: document.getElementById('r_sign_date').value,
-  };
-  document.getElementById('print-view').innerHTML = `
-    <div style="font-family:'Almarai','Tajawal',sans-serif; direction:rtl;">
-      <h2 style="color:#0B2C52;">تقرير التنفيذ والـ Go-Live — ${escapeHtml(client.name || '')}</h2>
-      <p><b>الدولة:</b> ${escapeHtml(client.country || '-')} | <b>مهندس الميدان:</b> ${escapeHtml(d.engineer_name || '-')} | <b>تاريخ التفعيل:</b> ${escapeHtml(d.activation_date || '-')}</p>
-      <h3>ملاحظات الهاردوير والتركيب</h3><p>${escapeHtml(d.hardware_notes || '-')}</p>
-      <h3>Checklist التركيب</h3>
-      <ul>${d.checklist.map(c => `<li>${escapeHtml(c.item)} — ${c.done ? 'تم' : 'لسه'}</li>`).join('') || '<li>-</li>'}</ul>
-      <h3>ملخص التدريب</h3><p>${escapeHtml(d.training_summary || '-')}</p>
-      <h3>المشاكل والإجراءات</h3>
-      <ul>${d.issues.map(i => `<li>${escapeHtml(i.issue)} — ${escapeHtml(i.action)} (${escapeHtml(i.owner || '-')})</li>`).join('') || '<li>-</li>'}</ul>
-      <h3>حالة الـ Go-Live: ${escapeHtml(d.status)}</h3>
-      <p><b>توصية مهندس الميدان:</b> ${escapeHtml(d.recommendation || '-')}</p>
-      <h3>التوقيع</h3>
-      <p>مهندس الميدان: ${escapeHtml(d.sign_eng || '____________')} &nbsp;&nbsp; ممثل العميل: ${escapeHtml(d.sign_client || '____________')} &nbsp;&nbsp; التاريخ: ${escapeHtml(d.sign_date || '-')}</p>
-    </div>
-  `;
-  printInLightMode();
+function actionLabel(action) {
+  if (action === 'stage_change') return 'تغيير مرحلة عميل';
+  if (action === 'review_status_change') return 'تغيير حالة مراجعة';
+  if (action === 'role_change') return 'تغيير دور مستخدم';
+  return action;
+}
+
+function formatAuditDetails(d) {
+  if (!d) return '-';
+  if (d.client_name) return `${d.client_name}: ${d.from || '-'} ← ${d.to || '-'}`;
+  if (d.user_name) return `${d.user_name}: ${d.from || '-'} ← ${d.to || '-'}`;
+  return JSON.stringify(d);
 }
 </script>
 </body>

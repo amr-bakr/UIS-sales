@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 APP_JS = ROOT / "assets" / "app.js"
-PAGES = ["login.html", "sales.html", "support.html", "management.html", "report.html", "users.html", "clients.html"]
+PAGES = ["login.html", "sales.html", "support.html", "management.html", "report.html", "users.html", "clients.html", "settings.html"]
 
 # نمط الإصدار: بيتزود رقم واحد كل مرة تشغّل فيها السكريبت، عشان يكسر أي كاش قديم
 VERSION_PATTERN = re.compile(r"const APP_BUILD_VERSION = '([^']*)';")
